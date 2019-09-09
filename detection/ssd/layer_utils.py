@@ -190,7 +190,7 @@ def iou(boxes1, boxes2):
     union_areas = union(boxes1, boxes2, intersection_areas)
     return intersection_areas / union_areas
 
-# retriev ground truth class, bbox offset, and mask
+# retrieve ground truth class, bbox offset, and mask
 def get_gt_data(iou,
                 n_classes=6,
                 anchors=None,
@@ -200,6 +200,7 @@ def get_gt_data(iou,
     # for the given ground truth bounding box
     maxiou_per_gt = np.argmax(iou, axis=0)
     
+    # get the extra anchor boxes based on IoU
     threshold = config.params['gt_label_iou_thresh']
     if threshold < 1.0:
         iou_gt_thresh = np.argwhere(iou>threshold)

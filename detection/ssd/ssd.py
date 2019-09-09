@@ -129,7 +129,7 @@ class SSD():
                         n_classes=self.n_classes)
         # n_anchors = num of anchors per feature point (eg 4)
         # feature_shapes is the feature map shape
-        # feature map - basis of class and offset predictions
+        # feature maps of ssd - basis of class and offset predictions
         self.n_anchors, self.feature_shapes, self.ssd = ret
         self.ssd.summary()
         #plot_model(self.ssd,
@@ -343,30 +343,37 @@ class SSD():
 
 
     def evaluate_test(self):
+        # test labels csv path
         csv_path = os.path.join(config.params['data_path'],
                                 config.params['test_labels'])
-        print("CSV", csv_path)
+        # test dictionary
         dictionary, _ = build_label_dictionary(csv_path)
         keys = np.array(list(dictionary.keys()))
+        # number of gt bbox overlapping predicted bbox
         n_iou = 0
+        # sum of IoUs
         s_iou = 0
-        i = 0
+        # true positive
         tp = 0
+        # false positiove
         fp = 0
         for key in keys:
             labels = dictionary[key]
             labels = np.array(labels)
             # 4 boxes coords are 1st four items of labels
             gt_boxes = labels[:, 0:-1]
+            # last one is class
             gt_class_ids = labels[:, -1]
+            # load image id by key
             image_file = os.path.join(config.params['data_path'], key)
-            print("Image: ", image_file)
             image = skimage.img_as_float(imread(image_file))
             image = np.expand_dims(image, axis=0)
+            # perform prediction
             classes, offsets = self.ssd.predict(image)
             image = np.squeeze(image, axis=0)
             classes = np.squeeze(classes)
             offsets = np.squeeze(offsets)
+            # perform nms
             _, _, class_ids, boxes = show_boxes(image,
                                                 classes,
                                                 offsets,
@@ -375,36 +382,29 @@ class SSD():
                                                 normalize=self.normalize)
 
             boxes = np.reshape(np.array(boxes), (-1,4))
+            # compute IoUs
             iou = layer_utils.iou(gt_boxes, boxes)
+            # skip empty IoUs
             if iou.size ==0:
                 continue
-            print("--------------")
-            print("gt:", gt_class_ids, gt_boxes)
-            print("iou w/ gt:", iou)
-            print("iou shape:", iou.shape)
+            # the class of predicted box w/ max iou
             maxiou_class = np.argmax(iou, axis=1)
-            print("classes: ", maxiou_class)
             n = iou.shape[0]
             n_iou += n
             s = []
             for j in range(n):
+                # list of max ious
                 s.append(iou[j, maxiou_class[j]])
+                # true positive has the same class and gt
                 if gt_class_ids[j] == class_ids[maxiou_class[j]]:
                     tp += 1
                 else:
                     fp += 1
 
+            # extra predictions belong to false positives
             fp += abs(len(class_ids) - len(gt_class_ids))
-            print("max ious: ", s)
             s = np.sum(s)
             s_iou += s
-            print("pred:", class_ids, boxes)
-            
-
-            print("--------------")
-            # i += 1
-            #if i==10:
-            #    break
 
         print("sum:", s_iou) 
         print("num:", n_iou) 

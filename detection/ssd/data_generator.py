@@ -32,7 +32,7 @@ class DataGenerator(Sequence):
                  n_classes,
                  input_shape=(480, 640, 3),
                  feature_shapes=[],
-                 n_anchors=3,
+                 n_anchors=4,
                  n_layers=6,
                  batch_size=4,
                  shuffle=True,
@@ -74,6 +74,7 @@ class DataGenerator(Sequence):
 
 
     def get_n_boxes(self):
+        # the number of bounding boxes
         self.n_boxes = 0
         for shape in self.feature_shapes:
             self.n_boxes += np.prod(shape) // self.n_anchors
@@ -106,12 +107,12 @@ class DataGenerator(Sequence):
 
     def __data_generation(self, keys):
         data_path = config.params['data_path']
-        x = np.empty((self.batch_size, *self.input_shape))
+        x = np.zeros((self.batch_size, *self.input_shape))
         dim = (self.batch_size, self.n_boxes, self.n_classes)
-        gt_class = np.empty(dim)
+        gt_class = np.zeros(dim)
         dim = (self.batch_size, self.n_boxes, 4)
-        gt_offset = np.empty(dim)
-        gt_mask = np.empty(dim)
+        gt_offset = np.zeros(dim)
+        gt_mask = np.zeros(dim)
 
         for i, key in enumerate(keys):
             # images are assumed to be stored in config data_path
