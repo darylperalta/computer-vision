@@ -8,6 +8,7 @@ import torchvision.transforms as transforms
 import datetime
 import argparse
 import matplotlib.pyplot as plt
+
 from dataset import mnist
 
 class Encoder(nn.Module):
