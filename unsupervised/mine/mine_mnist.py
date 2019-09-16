@@ -49,8 +49,10 @@ def train(args,
           epoch):
     model.train()
     plot_loss = []
-    log_interval = len(joint_data) // 10
+    log_interval = len(joint_data.dataset) // joint_data.batch_size
+    log_interval //= 10
     x_train = zip(joint_data, marginal1_data, marginal2_data)
+    datalen = 0
     for i, data in enumerate(x_train):
         # data[0] is pair of 2 images + 1 label
         # data[1]/[2] is 1 image + 1 label
@@ -77,10 +79,11 @@ def train(args,
         loss.backward()
         optimizer.step()
 
-        if (i + 1) % log_interval == 0:
+        datalen += len(x[0])
+        if (i + 1) % log_interval == 0 or datalen == len(joint_data.dataset):
             print('Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                   epoch,
-                  i * len(data),
+                  datalen,
                   len(joint_data.dataset),
                   100. * (i + 1) / len(joint_data),
                   loss.item()))
