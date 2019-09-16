@@ -72,7 +72,7 @@ def train(args,
         loss = torch.mean(pred_xy) \
                - torch.log(torch.mean(torch.exp(pred_x_y)))
         loss = -loss #maximize
-        plot_loss.append(loss.data.numpy())
+        plot_loss.append(loss.data.cpu().numpy())
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -82,7 +82,7 @@ def train(args,
                   epoch,
                   i * len(data),
                   len(joint_data.dataset),
-                  100. * i / len(joint_data),
+                  100. * (i + 1) / len(joint_data),
                   loss.item()))
 
 
@@ -124,7 +124,7 @@ def main():
                         help='input batch size for training (default: 128)')
     parser.add_argument('--epochs',
                         type=int,
-                        default=10,
+                        default=20,
                         metavar='N',
                         help='number of epochs to train (default: 10)')
     parser.add_argument('--save-model',
@@ -208,7 +208,7 @@ def main():
     encoder = Encoder().to(device)
     if torch.cuda.device_count() > 1:
         print("Available GPUs:", torch.cuda.device_count())
-        # model = nn.DataParallel(model)
+        # encoder = nn.DataParallel(encoder)
     print(encoder)
     print(device)
     optimizer = optim.Adam(encoder.parameters())
