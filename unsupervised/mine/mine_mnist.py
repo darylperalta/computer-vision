@@ -5,9 +5,11 @@ import torch.optim as optim
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 
+from tqdm import tqdm
 import datetime
 import argparse
 import matplotlib.pyplot as plt
+import numpy as np
 
 from dataset import mnist
 
@@ -15,46 +17,74 @@ class Encoder(nn.Module):
 
     def __init__(self):
         super(Encoder, self).__init__()
-        # (channel, filters, kernel_size)
-        self.conv1 = nn.Conv2d(1, 32, 3, stride=2, padding=1)
-        self.conv2 = nn.Conv2d(32, 64, 3, stride=2, padding=1)
-        # (28,28), (14, 14), (7,7)
-        self.fc1 = nn.Linear(64 * 7 * 7, 16)
+        self.backbone = torch.nn.Sequential(
+            # (channel, filters, kernel_size)
+            nn.Conv2d(1, 32, 3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, 3, stride=2, padding=1),
+            nn.ReLU(),
+            # (28,28), (14, 14), (7,7)
+            nn.Flatten(),
+            nn.Linear(64 * 7 * 7, 10)
+            )
+        self.fc1 = nn.Linear(10, 64)
+        self.fc2 = nn.Linear(64, 1)
 
-    def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = x.view(-1, self.num_flat_features(x))
-        x = self.fc1(x)
+    def forward(self, x1, x2):
+        x1 = self.backbone(x1)
+        x2 = self.backbone(x2)
+        x = F.relu(x1 + x2)
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
         return x
 
-    def num_flat_features(self, x):
-        size = x.size()[1:]  # all dimensions except the batch dimension
-        num_features = 1
-        for s in size:
-            num_features *= s
-        return num_features
 
-
-def train(args, model, device, train_loader, optimizer, epoch):
+def train(args,
+          model,
+          device,
+          joint_data,
+          marginal1_data,
+          marginal2_data,
+          optimizer,
+          epoch):
     model.train()
-    log_interval = len(train_loader) // 10
-    for i, data in enumerate(train_loader):
-        inputs, labels = data[0].to(device), data[1].to(device)
+    plot_loss = []
+    log_interval = len(joint_data) // 10
+    x_train = zip(joint_data, marginal1_data, marginal2_data)
+    for i, data in enumerate(x_train):
+        # data[0] is pair of 2 images + 1 label
+        # data[1]/[2] is 1 image + 1 label
+        xy, x, y = data[0], data[1], data[2]
+        #a = np.array(inputs[1])
+        #print(a.shape)
+        #print(inputs[1])
+        #print(len(x))
+        #print(len(y))
+        #exit(0)
+        x1 = xy[0][0].to(device)
+        x2 = xy[0][1].to(device)
+        pred_xy = model(x1, x2)
+
+        x1 = x[0].to(device)
+        x2 = y[0].to(device)
+        pred_x_y = model(x1, x2)
+
+        loss = torch.mean(pred_xy) \
+               - torch.log(torch.mean(torch.exp(pred_x_y)))
+        loss = -loss #maximize
+        plot_loss.append(loss.data.numpy())
         optimizer.zero_grad()
-        outputs = model(inputs)
-
-        loss = F.nll_loss(outputs, labels)
-
         loss.backward()
         optimizer.step()
+
         if (i + 1) % log_interval == 0:
             print('Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                   epoch,
                   i * len(data),
-                  len(train_loader.dataset),
-                  100. * i / len(train_loader),
+                  len(joint_data.dataset),
+                  100. * i / len(joint_data),
                   loss.item()))
+
 
 def test(args, model, device, test_loader):
     model.eval()
@@ -103,91 +133,76 @@ def main():
                         help='For Saving the current Model')
     args = parser.parse_args()
     use_cuda = not args.no_cuda and torch.cuda.is_available()
-    torch.manual_seed(args.seed)
+    # torch.manual_seed(args.seed)
 
     # kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
     kwargs = {'num_workers': 4} if use_cuda else {}
 
-    #transform = transforms.Compose([transforms.ToTensor(),
-    #                                transforms.Normalize((0.1307,), (0.3081,))])
     transform1 = transforms.Compose([transforms.ToTensor()])
     affine = transforms.RandomAffine(5, shear=(10, 10, 10, 10), translate=(0.2,0.2))
     transform2 = transforms.Compose([affine, transforms.ToTensor()])
 
-    x_train = mnist.SiameseMNIST(root='./data',
-                                train=True,
-                                download=True,
-                                transform=transform1,
-                                siamese_transform=transform2)
+    joint = mnist.SiameseMNIST(root='./data',
+                               train=True,
+                               download=True,
+                               transform=transform1,
+                               siamese_transform=transform2)
 
     DataLoader = torch.utils.data.DataLoader
-    train_loader = DataLoader(x_train,
-                              shuffle=True,
-                              batch_size=args.batch_size,
-                              **kwargs)
+    joint_data = DataLoader(joint,
+                            shuffle=True,
+                            batch_size=args.batch_size,
+                            **kwargs)
 
-    for i, data in enumerate(train_loader):
-        #print(data.shape)
+    marginal1 = datasets.MNIST(root='./data',
+                               train=True,
+                               download=True,
+                               transform=transform1)
+    marginal1_data = DataLoader(marginal1,
+                                shuffle=True,
+                                batch_size=args.batch_size,
+                                **kwargs)
+
+    marginal2 = datasets.MNIST(root='./data',
+                               train=True,
+                               download=True,
+                               transform=transform2)
+    marginal2_data = DataLoader(marginal2,
+                                shuffle=True,
+                                batch_size=args.batch_size,
+                                **kwargs)
+
+    for i, data in enumerate(joint_data):
+        break
+        print(len(data))
         img = data[0][0][0]
         plt.imshow(img.squeeze(), cmap='gray')
         plt.show()
         img = data[0][1][0]
         plt.imshow(img.squeeze(), cmap='gray')
         plt.show()
-        if i == 4:
+        if i == 2:
             break
-        #img = data1[0][0]
-        #plt.imshow(img.squeeze(), cmap='gray')
-        #plt.show()
        
-    exit(0)
-
-
-    x_train1 = datasets.MNIST(root='./data',
-                             train=True,
-                             download=True,
-                             transform=transform1)
-
-    x_train2 = datasets.MNIST(root='./data',
-                             train=True,
-                             download=True,
-                             transform=transform2)
-
-    x_test = datasets.MNIST(root='./data',
-                            train=False,
-                            download=True,
-                            transform=transform1)
-
-    print("Train dataset size:", len(x_train1))
-    print("Test dataset size", len(x_test))
-
-
-    train_loader1 = DataLoader(x_train1,
-                               shuffle=False,
-                               batch_size=args.batch_size,
-                               **kwargs)
-
-    train_loader2 = DataLoader(x_train2,
-                               shuffle=False,
-                               batch_size=args.batch_size,
-                               **kwargs)
-
-    for index, (data1, data2) in enumerate(zip(train_loader1, train_loader2)):
-        img = data1[0][0]
-        plt.imshow(img.squeeze(), cmap='gray')
-        plt.show()
-        img = data2[0][0]
-        plt.imshow(img.squeeze(), cmap='gray')
-        plt.show()
-
+    for i, data in enumerate(marginal1_data):
         break
-
-
-    test_loader = DataLoader(x_test,
-                             shuffle=True,
-                             batch_size=args.batch_size,
-                             **kwargs)
-
+        print(len(data))
+        img = data[0][0]
+        plt.imshow(img.squeeze(), cmap='gray')
+        plt.show()
+        if i == 2:
+            break
+       
+    for i, data in enumerate(marginal2_data):
+        break
+        print(len(data))
+        img = data[0][0]
+        plt.imshow(img.squeeze(), cmap='gray')
+        plt.show()
+        if i == 2:
+            break
+       
+    print("Train dataset size:", len(joint))
 
     device = torch.device("cuda" if use_cuda else "cpu")
     encoder = Encoder().to(device)
@@ -196,19 +211,20 @@ def main():
         # model = nn.DataParallel(model)
     print(encoder)
     print(device)
-    exit(0)
-    # criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters())
+    optimizer = optim.Adam(encoder.parameters())
 
     start_time = datetime.datetime.now()
-    for epoch in range(1, args.epochs + 1):
-        train(args, model, device, train_loader, optimizer, epoch)
+    for epoch in tqdm(range(args.epochs)):
+        train(args,
+              encoder,
+              device,
+              joint_data,
+              marginal1_data,
+              marginal2_data,
+              optimizer,
+              epoch)
     elapsed_time = datetime.datetime.now() - start_time
     print("Elapsed time (train): %s" % elapsed_time)
-    test(args, model, device, test_loader)
-
-    if (args.save_model):
-        torch.save(model.state_dict(), "mnist_cnn.pt")
 
 
 if __name__ == '__main__':

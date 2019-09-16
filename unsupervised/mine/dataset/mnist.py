@@ -38,7 +38,6 @@ class SiameseMNIST(datasets.MNIST):
         if self.transform is not None:
             img1 = self.transform(img1)
 
-
         if self.siamese_transform is not None:
             img2 = self.siamese_transform(img2)
 

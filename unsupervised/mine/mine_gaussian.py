@@ -48,36 +48,36 @@ def compute_mi(cov_xy=0.9, n_bins=100):
 
 class Mine1(nn.Module):
     def __init__(self, hidden_units=10):
-        super(Net, self).__init__()
+        super(Mine1, self).__init__()
         self.fc1 = nn.Linear(1, hidden_units)
         self.fc2 = nn.Linear(1, hidden_units)
         self.fc3 = nn.Linear(hidden_units, 1)
 
     def forward(self, x, y):
-        h1 = F.relu(self.fc1(x) + self.fc2(y))
-        h2 = self.fc3(h1)
-        return h2  
+        x = F.relu(self.fc1(x) + self.fc2(y))
+        x = self.fc3(x)
+        return x
 
 
 class Mine2(nn.Module):
-    def __init__(self, input_size=2, hidden_size=10):
-        super().__init__()
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, 1)
+    def __init__(self, input_size=2, hidden_units=10):
+        super(Mine2, self).__init__()
+        self.fc1 = nn.Linear(input_size, hidden_units)
+        self.fc2 = nn.Linear(hidden_units, hidden_units)
+        self.fc3 = nn.Linear(hidden_units, 1)
 
     def forward(self, x):
-        output = F.elu(self.fc1(x))
-        output = F.elu(self.fc2(output))
-        output = self.fc3(output)
-        return output
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
 
 
 def train_mine(cov_xy=0.9, mine_model=2, device='cpu'):
     if mine_model==2:
         model = Mine2().to(device)
     else:
-        model = Mine2().to(device)
+        model = Mine1().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     plot_loss = []
     n_samples = 10000
@@ -95,16 +95,12 @@ def train_mine(cov_xy=0.9, mine_model=2, device='cpu'):
         y1 = torch.from_numpy(y1).to(device)
         x2 = torch.from_numpy(x2).to(device)
         y2 = torch.from_numpy(y2).to(device)
-        x1 = Variable(x1.type(torch.FloatTensor),
-                              requires_grad = True)
-        y1 = Variable(y1.type(torch.FloatTensor),
-                              requires_grad = True)
-        x2 = Variable(x2.type(torch.FloatTensor),
-                              requires_grad = True)
-        y2 = Variable(y2.type(torch.FloatTensor),
-                              requires_grad = True)
+        x1 = x1.type(torch.FloatTensor)
+        y1 = y1.type(torch.FloatTensor)
+        x2 = x2.type(torch.FloatTensor)
+        y2 = y2.type(torch.FloatTensor)
     
-        if True:
+        if mine_model==2:
             xy = torch.cat((x1, y1), 1)
             pred_xy = model(xy)
             xy = torch.cat((x2, y2), 1)
@@ -117,7 +113,7 @@ def train_mine(cov_xy=0.9, mine_model=2, device='cpu'):
                - torch.log(torch.mean(torch.exp(pred_x_y)))
         loss = -loss #maximize
         plot_loss.append(loss.data.numpy())
-        model.zero_grad()
+        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
@@ -146,9 +142,9 @@ if __name__ == '__main__':
     use_cuda = not args.no_cuda and torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
     print("Device: ", device)
-    cov_xy = args.cov_xy
-    print("Covariace off diagonal:", cov_xy)
-    compute_mi(cov_xy=cov_xy)
-    train_mine(cov_xy=cov_xy,
+    print("Covariace off diagonal:", args.cov_xy)
+    print("Mine model ver:", args.mine_model)
+    compute_mi(cov_xy=args.cov_xy)
+    train_mine(cov_xy=args.cov_xy,
                mine_model=args.mine_model,
                device=device)
