@@ -10,12 +10,12 @@ import datetime
 import argparse
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 from dataset import mnist
 
 class Encoder(nn.Module):
-
-    def __init__(self):
+    def __init__(self, latent_dim=10):
         super(Encoder, self).__init__()
         self.backbone = torch.nn.Sequential(
             # (channel, filters, kernel_size)
@@ -23,20 +23,44 @@ class Encoder(nn.Module):
             nn.ReLU(),
             nn.Conv2d(32, 64, 3, stride=2, padding=1),
             nn.ReLU(),
-            # (28,28), (14, 14), (7,7)
             nn.Flatten(),
-            nn.Linear(64 * 7 * 7, 10)
+            nn.Linear(64 * 7 * 7, latent_dim),
+            nn.Softmax()
             )
-        self.fc1 = nn.Linear(10, 64)
-        self.fc2 = nn.Linear(64, 1)
 
-    def forward(self, x1, x2):
-        x1 = self.backbone(x1)
-        x2 = self.backbone(x2)
-        x = F.relu(x1 + x2)
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
+    def forward(self, x):
+        x = self.backbone(x)
         return x
+
+
+class Mine(nn.Module):
+    def __init__(self, latent_dim=10, hidden_units=64):
+        super(Mine, self).__init__()
+        self.fc1 = nn.Linear(latent_dim, hidden_units)
+        self.fc2 = nn.Linear(latent_dim, hidden_units)
+        self.fc3 = nn.Linear(hidden_units, 1)
+
+    def forward(self, x, y):
+        x = F.relu(self.fc1(x) + self.fc2(y))
+        x = self.fc3(x)
+        return x
+
+
+class Model(nn.Module):
+    def __init__(self, latent_dim=10, hidden_units=256):
+        super(Model, self).__init__()
+        self._backbone = Encoder(latent_dim=latent_dim)
+        self.mine = Mine(latent_dim=latent_dim, hidden_units=hidden_units)
+
+    def forward(self, x, y):
+        x = self._backbone(x)
+        y = self._backbone(y)
+        x = self.mine(x, y)
+        return x
+
+    @property
+    def backbone(self):
+        return self._backbone
 
 
 def train(args,
@@ -50,7 +74,7 @@ def train(args,
     model.train()
     plot_loss = []
     log_interval = len(joint_data.dataset) // joint_data.batch_size
-    log_interval //= 10
+    log_interval //= 5
     x_train = zip(joint_data, marginal1_data, marginal2_data)
     datalen = 0
     for i, data in enumerate(x_train):
@@ -89,18 +113,25 @@ def train(args,
                   loss.item()))
 
 
+
 def test(args, model, device, test_loader):
     model.eval()
+    backbone = model.backbone
     test_loss = 0
     correct = 0
     with torch.no_grad():
         for data in test_loader:
             inputs, labels = data[0].to(device), data[1].to(device)
-            outputs = model(inputs)
-            test_loss += F.nll_loss(outputs, labels, reduction='sum').item()
-            pred = outputs.argmax(dim=1, keepdim=True)
-            correct += pred.eq(labels.view_as(pred)).sum().item()
+            outputs = backbone(inputs).cpu().numpy()
+            # outputs = np.argmax(outputs, axis=1)
+            labels = labels.cpu().numpy()
+            print(outputs, labels)
+            # test_loss += F.nll_loss(outputs, labels, reduction='sum').item()
+            #pred = outputs.argmax(dim=1, keepdim=True)
+            #correct += pred.eq(labels.view_as(pred)).sum().item()
 
+
+    exit(0)
     test_loss /= len(test_loader.dataset)
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)\n'.format(
           test_loss,
@@ -122,18 +153,22 @@ def main():
                         help='random seed (default: 1)')
     parser.add_argument('--batch-size',
                         type=int,
-                        default=128,
+                        default=1024,
                         metavar='N',
                         help='input batch size for training (default: 128)')
     parser.add_argument('--epochs',
                         type=int,
-                        default=20,
+                        default=40,
                         metavar='N',
                         help='number of epochs to train (default: 10)')
     parser.add_argument('--save-model',
                         action='store_true',
                         default=False,
                         help='For Saving the current Model')
+    parser.add_argument('--encoder-weights',
+                        default=None,
+                        help='Encoder parameters')
+
     args = parser.parse_args()
     use_cuda = not args.no_cuda and torch.cuda.is_available()
     # torch.manual_seed(args.seed)
@@ -175,6 +210,18 @@ def main():
                                 batch_size=args.batch_size,
                                 **kwargs)
 
+
+    x_test = datasets.MNIST(root='./data',
+                            train=False,
+                            download=True,
+                            transform=transform1)
+
+    test_loader = DataLoader(x_test,
+                             shuffle=True,
+                             batch_size=8,
+                             **kwargs)
+
+
     for i, data in enumerate(joint_data):
         break
         print(len(data))
@@ -208,18 +255,18 @@ def main():
     print("Train dataset size:", len(joint))
 
     device = torch.device("cuda" if use_cuda else "cpu")
-    encoder = Encoder().to(device)
+    model = Model().to(device)
     if torch.cuda.device_count() > 1:
         print("Available GPUs:", torch.cuda.device_count())
-        # encoder = nn.DataParallel(encoder)
-    print(encoder)
+        # model = nn.DataParallel(model)
+    print(model)
     print(device)
-    optimizer = optim.Adam(encoder.parameters())
+    optimizer = optim.Adam(model.parameters())
 
     start_time = datetime.datetime.now()
     for epoch in tqdm(range(args.epochs)):
         train(args,
-              encoder,
+              model,
               device,
               joint_data,
               marginal1_data,
@@ -228,7 +275,12 @@ def main():
               epoch)
     elapsed_time = datetime.datetime.now() - start_time
     print("Elapsed time (train): %s" % elapsed_time)
+    if (args.save_model):
+        os.makedirs("weights", exist_ok=True) 
+        path = os.path.join("weights", "mnist_encoder.pt")
+        torch.save(model.backbone.state_dict(), path)
 
+    test(args, model, device, test_loader)
 
 if __name__ == '__main__':
     main()
