@@ -112,6 +112,11 @@ def main():
                         default=1,
                         metavar='N',
                         help='number of epochs to train (default: 10)')
+    parser.add_argument('--latent-dim',
+                        type=int,
+                        default=10,
+                        metavar='N',
+                        help='latent dim')
     parser.add_argument('--save-model',
                         action='store_true',
                         default=False,
@@ -147,12 +152,11 @@ def main():
                              batch_size=args.batch_size,
                              **kwargs)
 
-    latent_dim = 10
 
     device = torch.device("cuda" if use_cuda else "cpu")
-    encoder = mine.Encoder(latent_dim=latent_dim).to(device)
+    encoder = mine.Encoder(latent_dim=args.latent_dim).to(device)
     encoder.load_state_dict(torch.load("weights/mnist_encoder.pt"))
-    model = Model(encoder=encoder, latent_dim=latent_dim).to(device)
+    model = Model(encoder=encoder, latent_dim=args.latent_dim).to(device)
     if torch.cuda.device_count() > 1:
         print("Available GPUs:", torch.cuda.device_count())
         # model = nn.DataParallel(model)
