@@ -16,14 +16,11 @@ class Encoder(nn.Module):
             nn.Conv2d(1, 64, 3, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(2),
-            nn.Conv2d(64, 64, 3, padding=1),
+            nn.Conv2d(64, 128, 3, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(2),
-            #nn.Conv2d(64, 64, 3, padding=1),
-            #nn.ReLU(),
-            #nn.MaxPool2d(2),
             nn.Flatten(),
-            nn.Linear(64 * 7 * 7, latent_dim),
+            nn.Linear(128 * 7 * 7, latent_dim),
             nn.LogSoftmax(dim=1)
         )
 
@@ -46,7 +43,7 @@ class Mine(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, latent_dim=16, hidden_units=256):
+    def __init__(self, latent_dim=16, hidden_units=512):
         super(Model, self).__init__()
         self._backbone = Encoder(latent_dim=latent_dim)
         self.mine = Mine(latent_dim=latent_dim, hidden_units=hidden_units)
