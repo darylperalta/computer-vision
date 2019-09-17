@@ -3,9 +3,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-def mi(joint, marginal, model):
-    t = model(joint)
-    et = torch.exp(model(marginal))
+def mi(model, joint_x1, joint_x2, marginal_x1, marginal_x2):
+    t = model(joint_x1, joint_x2)
+    et = torch.exp(model(marginal_x1, marginal_x2))
     mi_lb = torch.mean(t) - torch.log(torch.mean(et))
     return mi_lb, t, et
 
@@ -43,7 +43,7 @@ class Mine(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, latent_dim=16, hidden_units=512):
+    def __init__(self, latent_dim=16, hidden_units=256):
         super(Model, self).__init__()
         self._backbone = Encoder(latent_dim=latent_dim)
         self.mine = Mine(latent_dim=latent_dim, hidden_units=hidden_units)

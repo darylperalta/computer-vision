@@ -26,9 +26,9 @@ def train(args,
           marginal1_data,
           marginal2_data,
           optimizer,
-          epoch):
+          epoch,
+          ma_et = 1.):
     model.train()
-    #plot_loss = []
     log_interval = len(joint_data.dataset) // joint_data.batch_size
     log_interval //= 5
     x_train = zip(joint_data, marginal1_data, marginal2_data)
@@ -37,24 +37,27 @@ def train(args,
         # data[0] is pair of 2 images + 1 label
         # data[1]/[2] is 1 image + 1 label
         xy, x, y = data[0], data[1], data[2]
-        #a = np.array(inputs[1])
-        #print(a.shape)
-        #print(inputs[1])
-        #print(len(x))
-        #print(len(y))
+        jx1 = xy[0][0].to(device)
+        jx2 = xy[0][1].to(device)
+
+        # shuffle x2
+        #idx = torch.randperm(x2.nelement())
+        #x2 = x2.view(-1)[idx].view(x2.size())
         #exit(0)
-        x1 = xy[0][0].to(device)
-        x2 = xy[0][1].to(device)
-        pred_xy = model(x1, x2)
 
-        x1 = x[0].to(device)
-        x2 = y[0].to(device)
-        pred_x_y = model(x1, x2)
+        mx1 = x[0].to(device)
+        mx2 = y[0].to(device)
 
-        loss = torch.mean(pred_xy) \
-               - torch.log(torch.mean(torch.exp(pred_x_y)))
-        loss = -loss #maximize
-        #plot_loss.append(loss.data.cpu().numpy())
+        mi_lb, t, et = mine.mi(model, jx1, jx2, mx1, mx2)
+        loss = -mi_lb
+        #loss = torch.mean(pred_xy) \
+        #       - torch.log(torch.mean(torch.exp(pred_x_y)))
+        #loss = -loss #maximize
+
+        #ma_rate = 0.1
+        #ma_et = (1-ma_rate)*ma_et + ma_rate*torch.mean(et)
+        #loss = -(torch.mean(t) - (1/ma_et.mean()).detach()*torch.mean(t)*torch.mean(et))
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -68,6 +71,7 @@ def train(args,
                   100. * (i + 1) / len(joint_data),
                   loss.item()))
 
+    return mi_lb, ma_et
 
 
 def test(args, model, device, test_loader):
@@ -205,8 +209,9 @@ def main():
     optimizer = optim.Adam(model.parameters())
 
     start_time = datetime.datetime.now()
+    ma_et = 1.
     for epoch in tqdm(range(args.epochs)):
-        train(args,
+        mi_lb, ma_et = train(args,
               model,
               device,
               joint_data,
@@ -214,6 +219,7 @@ def main():
               marginal2_data,
               optimizer,
               epoch)
+        print(mi_lb.detach().cpu().numpy())
     elapsed_time = datetime.datetime.now() - start_time
     print("Elapsed time (train): %s" % elapsed_time)
     if (args.save_model):
@@ -221,7 +227,7 @@ def main():
         path = os.path.join("weights", "mnist_encoder.pt")
         torch.save(model.backbone.state_dict(), path)
 
-    test(args, model, device, test_loader)
+    # test(args, model, device, test_loader)
 
 if __name__ == '__main__':
     main()

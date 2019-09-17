@@ -114,7 +114,7 @@ def main():
                         help='number of epochs to train (default: 10)')
     parser.add_argument('--latent-dim',
                         type=int,
-                        default=10,
+                        default=16,
                         metavar='N',
                         help='latent dim')
     parser.add_argument('--save-model',
