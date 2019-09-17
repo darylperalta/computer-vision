@@ -1,6 +1,9 @@
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
@@ -11,56 +14,9 @@ import argparse
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import mine
 
 from dataset import mnist
-
-class Encoder(nn.Module):
-    def __init__(self, latent_dim=10):
-        super(Encoder, self).__init__()
-        self.backbone = torch.nn.Sequential(
-            # (channel, filters, kernel_size)
-            nn.Conv2d(1, 32, 3, stride=2, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, 3, stride=2, padding=1),
-            nn.ReLU(),
-            nn.Flatten(),
-            nn.Linear(64 * 7 * 7, latent_dim),
-            nn.Softmax()
-            )
-
-    def forward(self, x):
-        x = self.backbone(x)
-        return x
-
-
-class Mine(nn.Module):
-    def __init__(self, latent_dim=10, hidden_units=64):
-        super(Mine, self).__init__()
-        self.fc1 = nn.Linear(latent_dim, hidden_units)
-        self.fc2 = nn.Linear(latent_dim, hidden_units)
-        self.fc3 = nn.Linear(hidden_units, 1)
-
-    def forward(self, x, y):
-        x = F.relu(self.fc1(x) + self.fc2(y))
-        x = self.fc3(x)
-        return x
-
-
-class Model(nn.Module):
-    def __init__(self, latent_dim=10, hidden_units=256):
-        super(Model, self).__init__()
-        self._backbone = Encoder(latent_dim=latent_dim)
-        self.mine = Mine(latent_dim=latent_dim, hidden_units=hidden_units)
-
-    def forward(self, x, y):
-        x = self._backbone(x)
-        y = self._backbone(y)
-        x = self.mine(x, y)
-        return x
-
-    @property
-    def backbone(self):
-        return self._backbone
 
 
 def train(args,
@@ -72,7 +28,7 @@ def train(args,
           optimizer,
           epoch):
     model.train()
-    plot_loss = []
+    #plot_loss = []
     log_interval = len(joint_data.dataset) // joint_data.batch_size
     log_interval //= 5
     x_train = zip(joint_data, marginal1_data, marginal2_data)
@@ -98,7 +54,7 @@ def train(args,
         loss = torch.mean(pred_xy) \
                - torch.log(torch.mean(torch.exp(pred_x_y)))
         loss = -loss #maximize
-        plot_loss.append(loss.data.cpu().numpy())
+        #plot_loss.append(loss.data.cpu().numpy())
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -117,27 +73,12 @@ def train(args,
 def test(args, model, device, test_loader):
     model.eval()
     backbone = model.backbone
-    test_loss = 0
-    correct = 0
     with torch.no_grad():
         for data in test_loader:
             inputs, labels = data[0].to(device), data[1].to(device)
             outputs = backbone(inputs).cpu().numpy()
-            # outputs = np.argmax(outputs, axis=1)
             labels = labels.cpu().numpy()
             print(outputs, labels)
-            # test_loss += F.nll_loss(outputs, labels, reduction='sum').item()
-            #pred = outputs.argmax(dim=1, keepdim=True)
-            #correct += pred.eq(labels.view_as(pred)).sum().item()
-
-
-    exit(0)
-    test_loss /= len(test_loader.dataset)
-    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)\n'.format(
-          test_loss,
-          correct,
-          len(test_loader.dataset),
-          100. * correct / len(test_loader.dataset)))
 
 
 def main():
@@ -255,7 +196,7 @@ def main():
     print("Train dataset size:", len(joint))
 
     device = torch.device("cuda" if use_cuda else "cpu")
-    model = Model().to(device)
+    model = mine.Model().to(device)
     if torch.cuda.device_count() > 1:
         print("Available GPUs:", torch.cuda.device_count())
         # model = nn.DataParallel(model)
