@@ -5,5 +5,6 @@
 2. [Object Detection](https://drive.google.com/file/d/1lwlD1Q0LgRhwOtkimXsE_1VC1q_TNkld/view?usp=sharing)
     - [SSD in Keras](https://github.com/roatienza/computer-vision/blob/master/detection/ssd/README.md)
 3. [Object Segmentation](https://drive.google.com/file/d/1yC7cnmw-oVEAEtqvMwkptuEax0EV5gAr/view?usp=sharing)
+4. [Mutual Information, Unsupervised Learninng](https://drive.google.com/file/d/1f_vYYGa2jzZDCLek8fHNZxsCKxtbGMjC/view?usp=sharing)
 
 
