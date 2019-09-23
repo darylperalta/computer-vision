@@ -9,6 +9,13 @@ def mi(model, joint_x1, joint_x2, marginal_x1, marginal_x2):
     mi_lb = torch.mean(t) - torch.log(torch.mean(et))
     return mi_lb, t, et
 
+def init_weights(model):
+    if type(model) == nn.Linear:
+        nn.init.kaiming_normal_(model.weight)
+    if type(model) == nn.Conv2d:
+        nn.init.kaiming_normal_(model.weight)
+    
+
 class Encoder(nn.Module):
     def __init__(self, latent_dim):
         super(Encoder, self).__init__()
@@ -23,6 +30,7 @@ class Encoder(nn.Module):
             nn.Linear(128 * 7 * 7, latent_dim),
             nn.LogSoftmax(dim=1)
         )
+        self.backbone.apply(init_weights)
 
     def forward(self, x):
         x = self.backbone(x)
@@ -35,6 +43,9 @@ class Mine(nn.Module):
         self.fc1 = nn.Linear(latent_dim, hidden_units)
         self.fc2 = nn.Linear(latent_dim, hidden_units)
         self.fc3 = nn.Linear(hidden_units, 1)
+        nn.init.kaiming_normal_(self.fc1.weight)
+        nn.init.kaiming_normal_(self.fc2.weight)
+        nn.init.kaiming_normal_(self.fc3.weight)
 
     def forward(self, x, y):
         x = F.relu(self.fc1(x) + self.fc2(y))

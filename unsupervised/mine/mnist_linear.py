@@ -121,6 +121,9 @@ def main():
                         action='store_true',
                         default=False,
                         help='For Saving the current Model')
+    parser.add_argument('--saved-weights',
+                        default=None,
+                        help='Load saved encoder weights')
     args = parser.parse_args()
     use_cuda = not args.no_cuda and torch.cuda.is_available()
     torch.manual_seed(args.seed)
@@ -155,7 +158,11 @@ def main():
 
     device = torch.device("cuda" if use_cuda else "cpu")
     encoder = mine.Encoder(latent_dim=args.latent_dim).to(device)
-    encoder.load_state_dict(torch.load("weights/mnist_encoder.pt"))
+    if args.saved_weights:
+        folder = "weights"
+        os.makedirs(folder, exist_ok=True) 
+        path = os.path.join(folder, args.saved_weights)
+        encoder.load_state_dict(torch.load(path))
     model = Model(encoder=encoder, latent_dim=args.latent_dim).to(device)
     if torch.cuda.device_count() > 1:
         print("Available GPUs:", torch.cuda.device_count())
