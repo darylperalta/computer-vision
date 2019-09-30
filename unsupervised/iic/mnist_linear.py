@@ -16,7 +16,7 @@ import argparse
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-import mine
+import models
 
 from dataset import mnist
 
@@ -29,11 +29,15 @@ class Model(nn.Module):
             nn.Linear(hidden_units, 10),
             nn.LogSoftmax(dim=1)
             )
-        self.encoder = encoder
+        self._encoder = encoder
 
     def forward(self, x):
         x = self.linear(x)
         return x
+
+    @property
+    def encoder(self):
+        return self._encoder
 
 
 def train(args,
@@ -44,10 +48,10 @@ def train(args,
           optimizer,
           epoch):
     model.train()
-    #encoder.eval()
     encoder = model.encoder
+    encoder.eval()
     for param in encoder.parameters():
-        param.requires_grad = False
+            param.requires_grad = False
     log_interval = len(train_loader) // 10
     done_data = 0
     for i, data in enumerate(train_loader):
@@ -55,7 +59,6 @@ def train(args,
         with torch.no_grad():
             latent = encoder(x)
         y_pred = model(latent)
-        # y_pred = model(x)
 
         loss = F.nll_loss(y_pred, y)
         optimizer.zero_grad()
@@ -117,7 +120,7 @@ def main():
                         help='number of epochs to train (default: 10)')
     parser.add_argument('--latent-dim',
                         type=int,
-                        default=16,
+                        default=10,
                         metavar='N',
                         help='latent dim')
     parser.add_argument('--save-model',
@@ -160,7 +163,7 @@ def main():
 
 
     device = torch.device("cuda" if use_cuda else "cpu")
-    encoder = mine.Encoder(latent_dim=args.latent_dim).to(device)
+    encoder = models.Encoder(latent_dim=args.latent_dim).to(device)
     if args.saved_weights:
         folder = "weights"
         os.makedirs(folder, exist_ok=True) 
