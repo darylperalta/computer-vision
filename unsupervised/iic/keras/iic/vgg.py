@@ -20,6 +20,7 @@ from tensorflow.keras.utils import plot_model
 
 import numpy as np
 import os
+from data_generator import DataGenerator
 
 cfg = {
     'A': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
@@ -93,9 +94,17 @@ def make_layers(cfg, inputs, batch_norm=True, in_channels=1):
 if __name__ == '__main__':
     backbone = VGG(cfg['G'])
     backbone.model.summary()
-    iic = IIC(backbone.model, n_heads=2)
+    iic = IIC(backbone.model, n_heads=1)
     iic.model.summary()
     model_type = 'vgg4bn'
     plot_model(iic.model, to_file="%s.png" % model_type, show_shapes=True)
-    print(model_type)
-
+    optimizer = Adam(lr=1e-3)
+    iic.model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
+    train_gen = DataGenerator()
+    test_gen = DataGenerator(train=False)
+    iic.model.fit_generator(generator=train_gen,
+                            validation_data=test_gen,
+                            use_multiprocessing=True,
+                            epochs=5,
+                            #callbacks=callbacks,
+                            workers=1)
