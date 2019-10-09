@@ -91,7 +91,8 @@ def make_layers(cfg, inputs, batch_norm=True, in_channels=1):
 
         
 if __name__ == '__main__':
-    backbone = VGG(cfg['F'])
+    backbone = VGG(cfg['G'])
+    backbone.model.summary()
     iic = IIC(backbone.model, n_heads=2)
     iic.model.summary()
     model_type = 'vgg4bn'
