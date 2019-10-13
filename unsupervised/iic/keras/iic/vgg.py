@@ -49,7 +49,11 @@ class VGG():
         return self._model
 
 class IIC():
-    def __init__(self, backbone, input_shape=(24, 24, 1), n_labels=10, n_heads=1):
+    def __init__(self,
+                 backbone,
+                 input_shape=(24, 24, 1),
+                 n_labels=10,
+                 n_heads=1):
         self.backbone = backbone
         self.n_labels = n_labels
         self.n_heads = n_heads
@@ -92,7 +96,7 @@ def make_layers(cfg, inputs, batch_norm=True, in_channels=1):
 
         
 if __name__ == '__main__':
-    backbone = VGG(cfg['G'])
+    backbone = VGG(cfg['F'])
     backbone.model.summary()
     iic = IIC(backbone.model, n_heads=1)
     iic.model.summary()
