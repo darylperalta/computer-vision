@@ -48,32 +48,6 @@ class VGG():
     def model(self):
         return self._model
 
-class IIC():
-    def __init__(self,
-                 backbone,
-                 input_shape=(24, 24, 1),
-                 n_labels=10,
-                 n_heads=1):
-        self.backbone = backbone
-        self.n_labels = n_labels
-        self.n_heads = n_heads
-        self._model = None
-        self.build_model(input_shape)
-
-    def build_model(self, input_shape):
-        inputs = Input(shape=input_shape)
-        x = self.backbone(inputs)
-        x = Flatten()(x)
-        outputs = []
-        for i in range(self.n_heads):
-            outputs.append(Dense(self.n_labels, activation='softmax')(x))
-        self._model = Model(inputs, outputs)
-        
-
-    @property
-    def model(self):
-        return self._model
-
 
 def make_layers(cfg, inputs, batch_norm=True, in_channels=1):
     x = inputs
@@ -98,17 +72,3 @@ def make_layers(cfg, inputs, batch_norm=True, in_channels=1):
 if __name__ == '__main__':
     backbone = VGG(cfg['F'])
     backbone.model.summary()
-    iic = IIC(backbone.model, n_heads=1)
-    iic.model.summary()
-    model_type = 'vgg4bn'
-    plot_model(iic.model, to_file="%s.png" % model_type, show_shapes=True)
-    optimizer = Adam(lr=1e-3)
-    iic.model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
-    train_gen = DataGenerator()
-    test_gen = DataGenerator(train=False)
-    iic.model.fit_generator(generator=train_gen,
-                            validation_data=test_gen,
-                            use_multiprocessing=True,
-                            epochs=5,
-                            #callbacks=callbacks,
-                            workers=1)

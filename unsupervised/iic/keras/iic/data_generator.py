@@ -26,7 +26,7 @@ class DataGenerator(Sequence):
                  normalize=False):
         self.dataset = dataset
         self.train = train
-        self.batch_size = batch_size
+        self._batch_size = batch_size
         self.shuffle = shuffle
         self.siamese = siamese
         self._dataset()
@@ -35,19 +35,15 @@ class DataGenerator(Sequence):
 
     def __len__(self):
         # number of batches per epoch
-        return int(np.floor(len(self.indexes) / self.batch_size))
+        return int(np.floor(len(self.indexes) / self._batch_size))
 
 
     def __getitem__(self, index):
         # indexes of the batch
-        start_index = index * self.batch_size
-        end_index = (index+1) * self.batch_size
-        if self.siamese:
-            x1, x2, y1, y2 = self.__data_generation(start_index, end_index)
-            return x1, x2, y1, y2
-        else:
-            x, y = self.__data_generation(start_index, end_index)
-            return x, y
+        start_index = index * self._batch_size
+        end_index = (index+1) * self._batch_size
+        return self.__data_generation(start_index, end_index)
+
 
     def _dataset(self):
         if self.train:
@@ -86,10 +82,17 @@ class DataGenerator(Sequence):
     def random_crop(self, image, target_shape, crop_sizes):
         height, width = image.shape[0], image.shape[1]
         choice = np.random.randint(0, len(crop_sizes))
-        dx = dy = crop_sizes[choice]
-        x = np.random.randint(0, width - dx + 1)
-        y = np.random.randint(0, height - dy + 1)
-        image = image[y:(y+dy), x:(x+dx), :]
+        d = crop_sizes[choice]
+        x = height - d
+        y = width - d
+        center = np.random.randint(0, 2)
+        if center:
+            dx = dy = d // 2
+            image = image[dy:(y + dy), dx:(x + dx), :]
+        else:
+            dx = np.random.randint(0, d + 1)
+            dy = np.random.randint(0, d + 1)
+            image = image[dy:(y + dy), dx:(x + dx), :]
         image = resize(image, target_shape)
         return image
 
@@ -114,8 +117,16 @@ class DataGenerator(Sequence):
                 x2[i] = self.random_crop(image, target_shape[1:], [8, 10, 12])
 
         if self.siamese:
-            return x1, x2, y1, y2
+            x_train = np.concatenate([x1, x2], axis=0)
+            y_train = np.concatenate([y1, y2], axis=0)
+            return x_train, y_train
+
         return x1, y1
+
+
+    @property
+    def batch_size(self):
+        return self._batch_size
 
 
 if __name__ == '__main__':
