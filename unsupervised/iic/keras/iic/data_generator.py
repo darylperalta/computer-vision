@@ -6,7 +6,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorflow.python.keras.utils.data_utils import Sequence
+#from tensorflow.python.keras.utils.data_utils import Sequence
+from tensorflow.keras.utils import Sequence
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.datasets import mnist
 
@@ -31,7 +32,6 @@ class DataGenerator(Sequence):
         self.siamese = siamese
         self._dataset()
         self.on_epoch_end()
-        # self.on_epoch_end()
 
     def __len__(self):
         # number of batches per epoch

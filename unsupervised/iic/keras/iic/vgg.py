@@ -7,16 +7,10 @@ from __future__ import division
 from __future__ import print_function
 
 
-import tensorflow as tf
-
 from tensorflow.keras.layers import Dense, Conv2D, BatchNormalization, Activation
 from tensorflow.keras.layers import MaxPooling2D, Input, Flatten, AveragePooling2D
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import ModelCheckpoint, LearningRateScheduler
 from tensorflow.keras.callbacks import ReduceLROnPlateau
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.models import Model
-from tensorflow.keras.utils import plot_model
 
 import numpy as np
 import os
