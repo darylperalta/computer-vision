@@ -164,7 +164,7 @@ class IIC():
             y_head = np.argmax(y_head, axis=1)
 
             accuracy = unsupervised_labels(list(self.y_test), list(y_head), self.n_labels, self.n_labels)
-            print("\nHead %d accuracy: %0.2f%%" % (head, accuracy))
+            print("Head %d accuracy: %0.2f%%, Current best accuracy: %0.2f%%" % (head, accuracy, self.accuracy))
             if accuracy > self.accuracy and args.save_weights is not None:
                 self.accuracy = accuracy
                 folder = args.save_dir

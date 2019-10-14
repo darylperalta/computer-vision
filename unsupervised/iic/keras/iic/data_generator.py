@@ -99,9 +99,10 @@ class DataGenerator(Sequence):
         image = resize(image, target_shape)
         return image
 
-    def random_rotate(self, image, deg=30):
+    def random_rotate(self, image, deg=20, target_shape=(24, 24, 1)):
         choice = np.random.randint(-deg, deg)
         image = rotate(image, choice)
+        image = resize(image, target_shape)
         return image
 
 
@@ -137,12 +138,17 @@ class DataGenerator(Sequence):
 
         for i in range(x1.shape[0]):
             image = x[i]
-            #x1[i] = image[d: image_size + d, d: image_size + d]
-            x1[i] = self.random_crop(image, target_shape[1:], crop_sizes)
+            x1[i] = image[d: image_size + d, d: image_size + d]
+            #x1[i] = self.random_crop(image, target_shape[1:], crop_sizes)
             if self.siamese:
-                x2[i] = self.random_crop(self.random_rotate(image),
-                                         target_shape[1:],
-                                         crop_sizes)
+                choice = np.random.randint(0, 4)
+                if choice < 2:
+                    x2[i] = self.random_rotate(image,
+                                               target_shape=target_shape[1:])
+                else:
+                    x2[i] = self.random_crop(image,
+                                             target_shape[1:],
+                                             crop_sizes)
 
         if self.siamese:
             x_train = np.concatenate([x1, x2], axis=0)
