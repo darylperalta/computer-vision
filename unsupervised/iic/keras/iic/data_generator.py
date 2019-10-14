@@ -19,12 +19,14 @@ from skimage.transform import resize
 
 class DataGenerator(Sequence):
     def __init__(self,
+                 args,
                  dataset=mnist,
                  train=True,
                  batch_size=512,
                  shuffle=True,
                  siamese=False,
                  normalize=False):
+        self.args = args
         self.dataset = dataset
         self.train = train
         self._batch_size = batch_size
@@ -119,7 +121,10 @@ class DataGenerator(Sequence):
         if self.siamese:
             x_train = np.concatenate([x1, x2], axis=0)
             y_train = np.concatenate([y1, y2], axis=0)
-            return x_train, y_train
+            y = []
+            for i in range(self.args.heads):
+                y.append(y_train)
+            return x_train, y
 
         return x1, y1
 
