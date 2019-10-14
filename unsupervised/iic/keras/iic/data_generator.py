@@ -6,8 +6,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-#from tensorflow.python.keras.utils.data_utils import Sequence
-import tensorflow as tf
 from tensorflow.keras.utils import Sequence
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.datasets import mnist
@@ -15,7 +13,7 @@ from tensorflow.keras.datasets import mnist
 import numpy as np
 import os
 import skimage
-from skimage.transform import resize
+from skimage.transform import resize, rotate
 
 
 class DataGenerator(Sequence):
@@ -101,6 +99,11 @@ class DataGenerator(Sequence):
         image = resize(image, target_shape)
         return image
 
+    def random_rotate(self, image, deg=30):
+        choice = np.random.randint(-deg, deg)
+        image = rotate(image, choice)
+        return image
+
 
     def __data_generation(self, start_index, end_index):
 
@@ -137,7 +140,9 @@ class DataGenerator(Sequence):
             #x1[i] = image[d: image_size + d, d: image_size + d]
             x1[i] = self.random_crop(image, target_shape[1:], crop_sizes)
             if self.siamese:
-                x2[i] = self.random_crop(image, target_shape[1:], crop_sizes)
+                x2[i] = self.random_crop(self.random_rotate(image),
+                                         target_shape[1:],
+                                         crop_sizes)
 
         if self.siamese:
             x_train = np.concatenate([x1, x2], axis=0)
