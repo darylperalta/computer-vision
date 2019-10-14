@@ -93,7 +93,8 @@ class IIC():
         Pi = K.clip(Pi, K.epsilon(), np.finfo(float).max)
         Pj = K.clip(Pj, K.epsilon(), np.finfo(float).max)
         neg_mi = K.sum((P * (K.log(Pi) + K.log(Pj) - K.log(P))))
-        return neg_mi/self.args.heads
+        return neg_mi
+        #return neg_mi/self.args.heads
 
 
     def train(self):
