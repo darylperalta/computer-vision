@@ -1,4 +1,4 @@
-"""VGG Model
+"""Build, train and evaluate an IIC Model
 
 """
 
@@ -19,8 +19,9 @@ from tensorflow.keras.datasets import mnist
 import numpy as np
 import os
 import argparse
-from data_generator import DataGenerator
 import vgg
+
+from data_generator import DataGenerator
 from utils import unsupervised_labels
 
 
@@ -44,28 +45,27 @@ class AccuracyCallback(Callback):
 class IIC():
     def __init__(self,
                  args,
-                 backbone,
-                 input_shape=(24, 24, 1),
-                 n_labels=10,
-                 n_heads=1):
+                 backbone):
         self.args = args
         self.backbone = backbone
-        self.n_labels = n_labels
-        self.n_heads = n_heads
         self._model = None
         self.train_gen = DataGenerator(args, siamese=True)
-        self.build_model(input_shape)
+        self.n_labels = self.train_gen.n_labels
+        self.build_model()
         self.load_eval_dataset()
+        self.accuracy = 0
 
 
-    def build_model(self, input_shape):
-        inputs = Input(shape=input_shape)
+    def build_model(self):
+        inputs = Input(shape=self.train_gen.input_shape)
         x = self.backbone(inputs)
         x = Flatten()(x)
         outputs = []
-        for i in range(self.n_heads):
+        for i in range(self.args.heads):
             name = "head%d" % i
-            outputs.append(Dense(self.n_labels, activation='softmax', name=name)(x))
+            outputs.append(Dense(self.n_labels,
+                                 activation='softmax',
+                                 name=name)(x))
         self._model = Model(inputs, outputs)
         optimizer = Adam(lr=1e-3)
         self._model.compile(optimizer=optimizer, loss=self.loss)
@@ -73,7 +73,7 @@ class IIC():
 
     
     def loss(self, y_true, y_pred):
-        size = self.train_gen.batch_size
+        size = self.args.batch_size
         n_labels = y_pred.shape[-1]
         y = y_pred[0: size, :]
         y = K.expand_dims(y, axis=2)
@@ -101,16 +101,16 @@ class IIC():
         if not os.path.isdir(save_dir):
             os.makedirs(save_dir)
 
-        model_name = "heads-%d" % self.n_heads
-        model_name += '-{epoch:04d}.h5'
-        filepath = os.path.join(save_dir, model_name)
-        checkpoint = ModelCheckpoint(filepath=filepath,
-                                     verbose=1,
-                                     save_weights_only=True)
+        #model_name = "heads-%d" % self.args.n_heads
+        #model_name += '-{epoch:04d}.h5'
+        #filepath = os.path.join(save_dir, model_name)
+        #checkpoint = ModelCheckpoint(filepath=filepath,
+        #                             verbose=1,
+        #                             save_weights_only=True)
 
         accuracy = AccuracyCallback(self)
         lr_scheduler = LearningRateScheduler(lr_schedule, verbose=1)
-        callbacks = [checkpoint, accuracy, lr_scheduler]
+        callbacks = [accuracy, lr_scheduler]
         self._model.fit_generator(generator=self.train_gen,
                                   use_multiprocessing=True,
                                   epochs=self.args.epochs,
@@ -128,12 +128,14 @@ class IIC():
         image = image[dy:(y + dy), dx:(x + dx), :]
         return image
 
+
     def load_eval_dataset(self):
         (_, _), (x_test, self.y_test) = self.args.dataset.load_data()
         image_size = x_test.shape[1]
         x_test = np.reshape(x_test,[-1, image_size, image_size, 1])
         x_test = x_test.astype('float32') / 255
-        x_eval = np.zeros((x_test.shape[0], image_size - self.args.crop, image_size - self.args.crop, 1))
+        #x_eval = np.zeros((x_test.shape[0], image_size - self.args.crop, image_size - self.args.crop, 1))
+        x_eval = np.zeros((x_test.shape[0], *self.train_gen.input_shape))
         for i in range(x_eval.shape[0]):
             x_eval[i] = self.crop(x_test[i])
 
@@ -163,6 +165,13 @@ class IIC():
 
             accuracy = unsupervised_labels(list(self.y_test), list(y_head), self.n_labels, self.n_labels)
             print("Head %d accuracy: %0.2f%%" % (head, accuracy))
+            if accuracy > self.accuracy and args.save_weights is not None:
+                self.accuracy = accuracy
+                folder = args.save_dir
+                os.makedirs(folder, exist_ok=True) 
+                path = os.path.join(folder, self.args.save_weights)
+                print("Saving weights... ", path)
+                self._model.save_weights(path)
 
 
     @property
@@ -176,6 +185,9 @@ if __name__ == '__main__':
     parser.add_argument('--save-dir',
                        default="weights",
                        help='Folder for storing model weights (h5)')
+    parser.add_argument('--save-weights',
+                       default=None,
+                       help='Folder for storing model weights (h5)')
     parser.add_argument('--dataset',
                        default=mnist,
                        help='Dataset to use')
@@ -184,6 +196,10 @@ if __name__ == '__main__':
                         default=4375,
                         metavar='N',
                         help='Number of epochs to train')
+    parser.add_argument('--batch-size',
+                        type=int,
+                        default=512,
+                        help='Train batch size')
     parser.add_argument('--heads',
                         type=int,
                         default=1,
@@ -192,6 +208,10 @@ if __name__ == '__main__':
     parser.add_argument('--restore-weights',
                         default=None,
                         help='Restore saved model weights')
+    parser.add_argument('--train',
+                        default=False,
+                        action='store_true',
+                        help='Evaluate')
     parser.add_argument('--eval',
                         default=False,
                         action='store_true',
@@ -205,9 +225,9 @@ if __name__ == '__main__':
 
     backbone = vgg.VGG(vgg.cfg['F'])
     backbone.model.summary()
-    iic = IIC(args, backbone.model, n_heads=args.heads)
+    iic = IIC(args, backbone.model)
     if args.eval:
         iic.load_weights()
         iic.eval()
-    else:
+    elif args.train:
         iic.train()

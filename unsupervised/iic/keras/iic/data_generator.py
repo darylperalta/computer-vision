@@ -20,50 +20,51 @@ from skimage.transform import resize
 class DataGenerator(Sequence):
     def __init__(self,
                  args,
-                 dataset=mnist,
-                 train=True,
-                 batch_size=512,
                  shuffle=True,
                  siamese=False,
-                 normalize=False):
+                 crop_size=4):
         self.args = args
-        self.dataset = dataset
-        self.train = train
-        self._batch_size = batch_size
         self.shuffle = shuffle
         self.siamese = siamese
+        self.crop_size = crop_size
         self._dataset()
         self.on_epoch_end()
 
     def __len__(self):
         # number of batches per epoch
-        return int(np.floor(len(self.indexes) / self._batch_size))
+        return int(np.floor(len(self.indexes) / self.args.batch_size))
 
 
     def __getitem__(self, index):
         # indexes of the batch
-        start_index = index * self._batch_size
-        end_index = (index+1) * self._batch_size
+        start_index = index * self.args.batch_size
+        end_index = (index+1) * self.args.batch_size
         return self.__data_generation(start_index, end_index)
 
 
     def _dataset(self):
-        if self.train:
-            (self.data, self.label), (_, _) = self.dataset.load_data()
+        dataset = self.args.dataset
+        if self.args.train:
+            (self.data, self.label), (_, _) = dataset.load_data()
         else:
-            (_, _), (self.data, self.label) = self.dataset.load_data()
-        if self.dataset == mnist:
-            self.num_channels = 1
+            (_, _), (self.data, self.label) = dataset.load_data()
+
+        if self.args.dataset == mnist:
+            self.n_channels = 1
         else:
-            self.num_channels = self.data.shape[3]
+            self.n_channels = self.data.shape[3]
+
+        image_size = self.data.shape[1]
+        side = image_size - self.crop_size
+        self.input_shape = [side, side, self.n_channels]
 
         # from sparse label to categorical
-        self.num_labels = len(np.unique(self.label))
+        self.n_labels = len(np.unique(self.label))
         self.label = to_categorical(self.label)
 
         # reshape and normalize input images
-        image_size = self.data.shape[1]
-        self.data = np.reshape(self.data,[-1, image_size, image_size, self.num_channels])
+        orig_shape = [-1, image_size, image_size, self.n_channels]
+        self.data = np.reshape(self.data, orig_shape)
         self.data = self.data.astype('float32') / 255
         self.indexes = [i for i in range(self.data.shape[0])]
 
@@ -90,23 +91,25 @@ class DataGenerator(Sequence):
         center = np.random.randint(0, 2)
         if center:
             dx = dy = d // 2
-            image = image[dy:(y + dy), dx:(x + dx), :]
+            #image = image[dy:(y + dy), dx:(x + dx), :]
         else:
             dx = np.random.randint(0, d + 1)
             dy = np.random.randint(0, d + 1)
-            image = image[dy:(y + dy), dx:(x + dx), :]
+
+        image = image[dy:(y + dy), dx:(x + dx), :]
         image = resize(image, target_shape)
         return image
 
 
     def __data_generation(self, start_index, end_index):
 
-        crop_size = 4
-        d = crop_size // 2
-        image_size = self.data.shape[1] - crop_size
-        x =  self.data[self.indexes[start_index : end_index]]
-        y1 =  self.label[self.indexes[start_index : end_index]]
-        target_shape = (x.shape[0], image_size, image_size, self.num_channels)
+        d = self.crop_size // 2
+        crop_sizes = [self.crop_size*2 + i for i in range(0,5,2)]
+        image_size = self.data.shape[1] - self.crop_size
+        x = self.data[self.indexes[start_index : end_index]]
+        y1 = self.label[self.indexes[start_index : end_index]]
+        # target_shape = (x.shape[0], image_size, image_size, self.n_channels)
+        target_shape = (x.shape[0], *self.input_shape)
         x1 = np.zeros(target_shape)
         if self.siamese:
             y2 = y1 
@@ -116,7 +119,7 @@ class DataGenerator(Sequence):
             image = x[i]
             x1[i] = image[d: image_size + d, d: image_size + d]
             if self.siamese:
-                x2[i] = self.random_crop(image, target_shape[1:], [8, 10, 12])
+                x2[i] = self.random_crop(image, target_shape[1:], crop_sizes)
 
         if self.siamese:
             x_train = np.concatenate([x1, x2], axis=0)
@@ -127,11 +130,6 @@ class DataGenerator(Sequence):
             return x_train, y
 
         return x1, y1
-
-
-    @property
-    def batch_size(self):
-        return self._batch_size
 
 
 if __name__ == '__main__':
