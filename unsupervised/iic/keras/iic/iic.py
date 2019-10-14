@@ -135,7 +135,7 @@ class IIC():
         x_test = np.reshape(x_test,[-1, image_size, image_size, 1])
         x_test = x_test.astype('float32') / 255
         #x_eval = np.zeros((x_test.shape[0], image_size - self.args.crop, image_size - self.args.crop, 1))
-        x_eval = np.zeros((x_test.shape[0], *self.train_gen.input_shape))
+        x_eval = np.zeros([x_test.shape[0], *self.train_gen.input_shape])
         for i in range(x_eval.shape[0]):
             x_eval[i] = self.crop(x_test[i])
 
