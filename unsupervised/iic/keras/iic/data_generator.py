@@ -7,6 +7,7 @@ from __future__ import division
 from __future__ import print_function
 
 #from tensorflow.python.keras.utils.data_utils import Sequence
+import tensorflow as tf
 from tensorflow.keras.utils import Sequence
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.datasets import mnist
@@ -108,7 +109,23 @@ class DataGenerator(Sequence):
         image_size = self.data.shape[1] - self.crop_size
         x = self.data[self.indexes[start_index : end_index]]
         y1 = self.label[self.indexes[start_index : end_index]]
-        # target_shape = (x.shape[0], image_size, image_size, self.n_channels)
+
+        #x1 = tf.image.random_crop(x, self.input_shape)
+        #x2 = tf.image.random_crop(x, self.input_shape)
+        #if self.siamese:
+        #    y2 = y1 
+        
+        #if self.siamese:
+        #    x_train = np.concatenate([x1, x2], axis=0)
+        #    y_train = np.concatenate([y1, y2], axis=0)
+        #    y = []
+        #    for i in range(self.args.heads):
+        #        y.append(y_train)
+        #    return x_train, y
+
+        #return x1, y1
+
+
         target_shape = (x.shape[0], *self.input_shape)
         x1 = np.zeros(target_shape)
         if self.siamese:
@@ -117,7 +134,8 @@ class DataGenerator(Sequence):
 
         for i in range(x1.shape[0]):
             image = x[i]
-            x1[i] = image[d: image_size + d, d: image_size + d]
+            #x1[i] = image[d: image_size + d, d: image_size + d]
+            x1[i] = self.random_crop(image, target_shape[1:], crop_sizes)
             if self.siamese:
                 x2[i] = self.random_crop(image, target_shape[1:], crop_sizes)
 
