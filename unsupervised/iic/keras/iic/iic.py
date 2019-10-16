@@ -93,21 +93,14 @@ class IIC():
         Pi = K.clip(Pi, K.epsilon(), np.finfo(float).max)
         Pj = K.clip(Pj, K.epsilon(), np.finfo(float).max)
         neg_mi = K.sum((P * (K.log(Pi) + K.log(Pj) - K.log(P))))
-        return neg_mi
-        #return neg_mi/self.args.heads
+        #return neg_mi
+        return neg_mi/self.args.heads
 
 
     def train(self):
         save_dir = self.args.save_dir
         if not os.path.isdir(save_dir):
             os.makedirs(save_dir)
-
-        #model_name = "heads-%d" % self.args.n_heads
-        #model_name += '-{epoch:04d}.h5'
-        #filepath = os.path.join(save_dir, model_name)
-        #checkpoint = ModelCheckpoint(filepath=filepath,
-        #                             verbose=1,
-        #                             save_weights_only=True)
 
         accuracy = AccuracyCallback(self)
         lr_scheduler = LearningRateScheduler(lr_schedule, verbose=1)
@@ -134,7 +127,6 @@ class IIC():
         image_size = x_test.shape[1]
         x_test = np.reshape(x_test,[-1, image_size, image_size, 1])
         x_test = x_test.astype('float32') / 255
-        #x_eval = np.zeros((x_test.shape[0], image_size - self.args.crop, image_size - self.args.crop, 1))
         x_eval = np.zeros([x_test.shape[0], *self.train_gen.input_shape])
         for i in range(x_eval.shape[0]):
             x_eval[i] = self.crop(x_test[i])
@@ -193,7 +185,7 @@ if __name__ == '__main__':
                        help='Dataset to use')
     parser.add_argument('--epochs',
                         type=int,
-                        default=4375,
+                        default=1200,
                         metavar='N',
                         help='Number of epochs to train')
     parser.add_argument('--batch-size',
