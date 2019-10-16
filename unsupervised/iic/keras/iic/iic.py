@@ -148,6 +148,7 @@ class IIC():
 
     def eval(self):
         y_pred = self._model.predict(self.x_test)
+        print("")
         for head in range(self.args.heads):
             if self.args.heads == 1:
                 y_head = y_pred
