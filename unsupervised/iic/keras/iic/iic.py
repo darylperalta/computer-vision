@@ -66,7 +66,7 @@ class IIC():
             outputs.append(Dense(self.n_labels,
                                  activation='softmax',
                                  name=name)(x))
-        self._model = Model(inputs, outputs)
+        self._model = Model(inputs, outputs, name='encoder')
         optimizer = Adam(lr=1e-3)
         self._model.compile(optimizer=optimizer, loss=self.loss)
         self._model.summary()
@@ -213,12 +213,23 @@ if __name__ == '__main__':
                         type=int,
                         default=4,
                         help='Pixels to crop from the image')
+    parser.add_argument('--plot-model',
+                        default=False,
+                        action='store_true',
+                        help='Plot all network models')
 
     args = parser.parse_args()
 
     backbone = vgg.VGG(vgg.cfg['F'])
     backbone.model.summary()
     iic = IIC(args, backbone.model)
+    if args.plot_model:
+        plot_model(backbone.model,
+                   to_file="model-vgg.png",
+                   show_shapes=True)
+        plot_model(iic.model,
+                   to_file="model-iic.png",
+                   show_shapes=True)
     if args.eval:
         iic.load_weights()
         iic.eval()
