@@ -66,7 +66,7 @@ def compute_mi(cov_xy=0.9, n_bins=100):
     xy[xy<eps] = eps
     mi = joint*np.log(joint/xy)
     mi = mi.sum()
-    print("Computed MI:", mi)
+    print("Computed MI: %0.6f" % mi)
     return mi
 
 
@@ -82,14 +82,14 @@ class SimpleMINE():
     def build_model(self):
         inputs1 = Input(shape=(1))
         inputs2 = Input(shape=(1))
-        x1 = Dense(10)(inputs1)
-        x2 = Dense(10)(inputs2)
+        x1 = Dense(16)(inputs1)
+        x2 = Dense(16)(inputs2)
         x = Add()([x1, x2])
         x = Activation('relu')(x)
         outputs = Dense(1)(x)
         inputs = [inputs1, inputs2]
         self._model = Model(inputs, outputs, name='MINE')
-        optimizer = Adam(lr=1e-1)
+        optimizer = Adam(lr=0.01)
         self._model.compile(optimizer=optimizer, loss=self.loss)
         self._model.summary()
 
@@ -110,20 +110,27 @@ class SimpleMINE():
     def train(self):
         plot_loss = []
         cov=[[1, self.args.cov_xy], [self.args.cov_xy, 1]]
+        loss = 0.
         for epoch in range(self.args.epochs):
-            xy = sample(n_data=self.args.samples, cov=cov)
+            xy = sample(n_data=self.args.batch_size,
+                        cov=cov)
             x1 = xy[:,0].reshape(-1,1)
             y1 = xy[:,1].reshape(-1,1)
-            xy = sample(joint=False, n_data=self.args.samples, cov=cov)
+            xy = sample(joint=False,
+                        n_data=self.args.batch_size,
+                        cov=cov)
             x2 = xy[:,0].reshape(-1,1)
             y2 = xy[:,1].reshape(-1,1)
     
             x =  np.concatenate((x1, x2))
             y =  np.concatenate((y1, y2))
-            loss = self._model.train_on_batch([x, y], np.zeros(x.shape))
-            plot_loss.append(loss)
+            loss_item = self._model.train_on_batch([x, y],
+                                                   np.zeros(x.shape))
+            loss += loss_item
+            plot_loss.append(loss_item)
             if (epoch + 1) % 100 == 0:
-                print("Loss: %0.4f" % loss)
+                print("Epoch %d MINE MI: %0.6f" % ((epoch+1), -loss/100))
+                loss = 0.
 
 
 
@@ -144,21 +151,16 @@ if __name__ == '__main__':
                        help='Dataset to use')
     parser.add_argument('--epochs',
                         type=int,
-                        default=1200,
+                        default=1000,
                         metavar='N',
                         help='Number of epochs to train')
     parser.add_argument('--batch-size',
                         type=int,
-                        default=512,
-                        metavar='N',
-                        help='Train batch size')
-    parser.add_argument('--samples',
-                        type=int,
                         default=10000,
                         metavar='N',
-                        help='Number of samples fr Gaussian dist')
+                        help='Train batch size')
     args = parser.parse_args()
     print("Covariace off diagonal:", args.cov_xy)
-    compute_mi(cov_xy=args.cov_xy)
     simple_mine = SimpleMINE(args)
     simple_mine.train()
+    compute_mi(cov_xy=args.cov_xy)
