@@ -1,4 +1,4 @@
-"""VGG Model
+"""VGG backbone creator
 
 """
 
@@ -9,13 +9,13 @@ from __future__ import print_function
 
 from tensorflow.keras.layers import Dense, Conv2D, BatchNormalization, Activation
 from tensorflow.keras.layers import MaxPooling2D, Input, Flatten, AveragePooling2D
-from tensorflow.keras.callbacks import ReduceLROnPlateau
 from tensorflow.keras.models import Model
 
 import numpy as np
-import os
-from data_generator import DataGenerator
 
+# A to E are standard VGG backbones
+# F was customized for IIC
+# G is experimental
 cfg = {
     'A': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
     'B': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
@@ -25,7 +25,7 @@ cfg = {
     'G': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'A'],
 }
 
-
+# VGG backbone class
 class VGG():
     def __init__(self, cfg, input_shape=(24, 24, 1)):
         self.cfg = cfg
@@ -42,7 +42,7 @@ class VGG():
     def model(self):
         return self._model
 
-
+# helper function to interpret config and make layers from it
 def make_layers(cfg, inputs, batch_norm=True, in_channels=1):
     x = inputs
     for v in cfg:

@@ -1,34 +1,37 @@
-import os
-import pickle
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
-
-def unsupervised_labels(y, y_hat, num_classes, num_clusters):
-    """
-    :param y: true label
-    :param y_hat: concentration parameter
-    :param num_classes: number of classes (determined by data)
-    :param num_clusters: number of clusters (determined by model)
-    :return: classification error rate
-    """
-    assert num_classes == num_clusters
+# linear assignment algorithm
+def unsupervised_labels(y, yp, n_classes, n_clusters):
+    assert n_classes == n_clusters
 
     # initialize count matrix
-    cnt_mtx = np.zeros([num_classes, num_classes])
+    C = np.zeros([n_clusters, n_classes])
 
-    # fill in matrix
+    # populate count matrix
     for i in range(len(y)):
-        cnt_mtx[int(y_hat[i]), int(y[i])] += 1
+        C[int(yp[i]), int(y[i])] += 1
 
-    # find optimal permutation
-    row_ind, col_ind = linear_sum_assignment(-cnt_mtx)
+    # optimal permutation using Hungarian Algo
+    # the higher the count, the lower the cost
+    # so we use -C for linear assignment
+    row, col = linear_sum_assignment(-C)
 
-    # compute error
-    error = 1 - cnt_mtx[row_ind, col_ind].sum() / cnt_mtx.sum()
+    # compute accuracy
+    accuracy = C[row, col].sum() / C.sum()
 
+    return accuracy * 100
 
-    accuracy = (1.0 - error) * 100.
-    #print('Classification accuracy= {:.2f}%'.format(accuracy))
+# crop the image from the center
+def center_crop(image, crop_size=4):
+    height, width = image.shape[0], image.shape[1]
+    x = height - crop_size
+    y = width - crop_size
+    dx = dy = crop_size // 2
+    image = image[dy:(y + dy), dx:(x + dx), :]
+    return image
 
-    return accuracy
