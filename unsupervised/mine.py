@@ -145,7 +145,7 @@ class SimpleMINE():
 
 class LinearClassifier():
     def __init__(self,
-                 latent_dim=16,
+                 latent_dim=10,
                  n_classes=10):
         self.args = args
         self.build_model(latent_dim, n_classes)
@@ -153,7 +153,7 @@ class LinearClassifier():
 
     def build_model(self, latent_dim, n_classes):
         inputs = Input(shape=(latent_dim,))
-        x = Dense(128)(inputs)
+        x = Dense(256)(inputs)
         outputs = Dense(n_classes, activation='softmax')(x)
         name = "classifier"
         self._model = Model(inputs, outputs, name=name)
@@ -166,7 +166,7 @@ class LinearClassifier():
     def train(self, x_test, y_test):
         self._model.fit(x_test,
                         y_test,
-                        epochs=1,
+                        epochs=10,
                         batch_size=128)
 
 
@@ -183,6 +183,7 @@ class MINE():
                  args,
                  backbone):
         self.args = args
+        self.latent_dim = args.latent_dim
         self.backbone = backbone
         self._model = None
         self.train_gen = DataGenerator(args, siamese=True, mine=True)
@@ -192,7 +193,6 @@ class MINE():
 
 
     def build_model(self):
-        self.latent_dim = 16
         inputs = Input(shape=self.train_gen.input_shape)
         x = self.backbone(inputs)
         x = Flatten()(x)
@@ -202,7 +202,7 @@ class MINE():
         self._encoder = Model(inputs, y, name="encoder")
         self._mine = SimpleMINE(self.args,
                                 input_dim=self.latent_dim,
-                                hidden_units=256,
+                                hidden_units=1024,
                                 output_dim=1)
         inputs1 = Input(shape=self.train_gen.input_shape)
         inputs2 = Input(shape=self.train_gen.input_shape)
@@ -226,8 +226,9 @@ class MINE():
 
         # upper half is pred for marginal dist
         pred_x_y = y_pred[size : y_pred.shape[0], :]
-        loss = K.mean(pred_xy) \
-               - K.log(K.mean(K.exp(pred_x_y)))
+        loss = K.mean(K.exp(pred_x_y))
+        loss = K.clip(loss, K.epsilon(), np.finfo(float).max)
+        loss = K.mean(pred_xy) - K.log(loss)
         return -loss
 
 
@@ -242,6 +243,7 @@ class MINE():
                                   callbacks=callbacks,
                                   workers=4,
                                   shuffle=True)
+
 
     # pre-load test data for evaluation
     def load_eval_dataset(self):
@@ -276,14 +278,6 @@ class MINE():
         self._classifier.train(y_pred, self.y_test)
         accuracy = self._classifier.eval(y_pred, self.y_test)
 
-        #y_pred = np.argmax(y_pred, axis=1)
-
-        #accuracy = unsupervised_labels(list(self.y_test),
-        #                               list(y_pred),
-        #                               self.n_labels,
-        #                               self.n_labels)
-
-        
         info = "Accuracy: %0.2f%%"
         if self.accuracy > 0:
             info += ", Old best accuracy: %0.2f%%" 
@@ -297,7 +291,8 @@ class MINE():
             and self.args.save_weights is not None:
             folder = self.args.save_dir
             os.makedirs(folder, exist_ok=True) 
-            path = os.path.join(folder, self.args.save_weights)
+            filename = "%d-dim-%s" % (self.latent_dim, self.args.save_weights)
+            path = os.path.join(folder, filename)
             print("Saving weights... ", path)
             self._model.save_weights(path)
 
@@ -351,10 +346,15 @@ if __name__ == '__main__':
                         default=1,
                         metavar='N',
                         help='Number of heads')
+    parser.add_argument('--latent-dim',
+                        type=int,
+                        default=10,
+                        metavar='N',
+                        help='MNIST encoder latent dim')
 
     args = parser.parse_args()
-    print("Covariace off diagonal:", args.cov_xy)
     if args.gaussian:
+        print("Covariace off diagonal:", args.cov_xy)
         simple_mine = SimpleMINE(args)
         simple_mine.train()
         compute_mi(cov_xy=args.cov_xy)
