@@ -14,6 +14,7 @@ from tensorflow.keras.callbacks import LearningRateScheduler
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras import backend as K
 from tensorflow.keras.datasets import mnist
+from tensorflow.keras.utils import to_categorical
 
 import numpy as np
 import os
@@ -142,6 +143,40 @@ class SimpleMINE():
         return self._model
 
 
+class LinearClassifier():
+    def __init__(self,
+                 latent_dim=16,
+                 n_classes=10):
+        self.args = args
+        self.build_model(latent_dim, n_classes)
+
+
+    def build_model(self, latent_dim, n_classes):
+        inputs = Input(shape=(latent_dim,))
+        x = Dense(128)(inputs)
+        outputs = Dense(n_classes, activation='softmax')(x)
+        name = "classifier"
+        self._model = Model(inputs, outputs, name=name)
+        self._model.compile(loss='categorical_crossentropy',
+                            optimizer='adam',
+                            metrics=['accuracy'])
+        self._model.summary()
+
+
+    def train(self, x_test, y_test):
+        self._model.fit(x_test,
+                        y_test,
+                        epochs=1,
+                        batch_size=128)
+
+
+    def eval(self, x_test, y_test):
+        score = self._model.evaluate(x_test,
+                                     y_test,
+                                     batch_size=128)
+        accuracy = score[1] * 100
+        return accuracy
+
 
 class MINE():
     def __init__(self,
@@ -153,32 +188,34 @@ class MINE():
         self.train_gen = DataGenerator(args, siamese=True, mine=True)
         self.n_labels = self.train_gen.n_labels
         self.build_model()
-        self.load_eval_dataset()
         self.accuracy = 0
 
 
     def build_model(self):
+        self.latent_dim = 16
         inputs = Input(shape=self.train_gen.input_shape)
         x = self.backbone(inputs)
         x = Flatten()(x)
-        y = Dense(self.n_labels,
-                  activation='softmax',
+        y = Dense(self.latent_dim,
+                  activation='linear',
                   name="class")(x)
         self._encoder = Model(inputs, y, name="encoder")
         self._mine = SimpleMINE(self.args,
-                                input_dim=self.n_labels,
-                                hidden_units=4096,
+                                input_dim=self.latent_dim,
+                                hidden_units=256,
                                 output_dim=1)
         inputs1 = Input(shape=self.train_gen.input_shape)
         inputs2 = Input(shape=self.train_gen.input_shape)
         x1 = self._encoder(inputs1)
         x2 = self._encoder(inputs2)
         outputs = self._mine.model([x1, x2])
-
         self._model = Model([inputs1, inputs2], outputs, name='encoder')
         optimizer = Adam(lr=1e-3)
         self._model.compile(optimizer=optimizer, loss=self.loss)
         self._model.summary()
+        self.load_eval_dataset()
+        self._classifier = LinearClassifier(latent_dim=self.latent_dim)
+
 
 
     # MINE loss 
@@ -216,6 +253,7 @@ class MINE():
         for i in range(x_eval.shape[0]):
             x_eval[i] = center_crop(x_test[i])
 
+        self.y_test = to_categorical(self.y_test)
         self.x_test = x_eval
 
 
@@ -235,13 +273,17 @@ class MINE():
     # evaluate the accuracy of the current model weights
     def eval(self):
         y_pred = self._encoder.predict(self.x_test)
-        print("")
-        y_pred = np.argmax(y_pred, axis=1)
+        self._classifier.train(y_pred, self.y_test)
+        accuracy = self._classifier.eval(y_pred, self.y_test)
 
-        accuracy = unsupervised_labels(list(self.y_test),
-                                       list(y_pred),
-                                       self.n_labels,
-                                       self.n_labels)
+        #y_pred = np.argmax(y_pred, axis=1)
+
+        #accuracy = unsupervised_labels(list(self.y_test),
+        #                               list(y_pred),
+        #                               self.n_labels,
+        #                               self.n_labels)
+
+        
         info = "Accuracy: %0.2f%%"
         if self.accuracy > 0:
             info += ", Old best accuracy: %0.2f%%" 

@@ -136,7 +136,7 @@ class DataGenerator(Sequence):
                 y = np.concatenate([y1, y2], axis=0)
                 m1 = np.copy(x1)
                 m2 = np.copy(x2)
-                np.random.shuffle(m1) 
+                #np.random.shuffle(m1) 
                 np.random.shuffle(m2)
 
                 x1 =  np.concatenate((x1, m1), axis=0)
