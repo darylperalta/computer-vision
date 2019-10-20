@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
+from tensorflow.keras.callbacks import Callback
 from scipy.optimize import linear_sum_assignment
 
 # linear assignment algorithm
@@ -34,4 +35,24 @@ def center_crop(image, crop_size=4):
     dx = dy = crop_size // 2
     image = image[dy:(y + dy), dx:(x + dx), :]
     return image
+
+
+# simple learning rate scheduler
+def lr_schedule(epoch):
+    lr = 1e-3
+    power = epoch // 400
+    lr *= 0.8**power
+
+    return lr
+
+
+# callback to compute the accuracy every epoch
+class AccuracyCallback(Callback):
+    def __init__(self, net):
+        super(AccuracyCallback, self).__init__()
+        self.net = net 
+
+    def on_epoch_end(self, epoch, logs=None):
+        self.net.eval()
+
 

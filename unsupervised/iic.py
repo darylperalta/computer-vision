@@ -10,7 +10,7 @@ from __future__ import print_function
 from tensorflow.keras.layers import Input, Dense, Flatten
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import LearningRateScheduler, Callback
+from tensorflow.keras.callbacks import LearningRateScheduler
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras import backend as K
 from tensorflow.keras.datasets import mnist
@@ -21,24 +21,7 @@ import argparse
 import vgg
 
 from data_generator import DataGenerator
-from utils import unsupervised_labels, center_crop
-
-# simple learning rate scheduler
-def lr_schedule(epoch):
-    lr = 1e-3
-    power = epoch // 400
-    lr *= 0.8**power
-
-    return lr
-
-# callback to compute the accuracy every epoch
-class AccuracyCallback(Callback):
-    def __init__(self, iic):
-        super(AccuracyCallback, self).__init__()
-        self.iic = iic
-
-    def on_epoch_end(self, epoch, logs=None):
-        self.iic.eval()
+from utils import unsupervised_labels, center_crop, AccuracyCallback, lr_schedule
 
 
 class IIC():

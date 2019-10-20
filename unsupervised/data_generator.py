@@ -19,10 +19,12 @@ class DataGenerator(Sequence):
                  args,
                  shuffle=True,
                  siamese=False,
+                 mine=False,
                  crop_size=4):
         self.args = args
         self.shuffle = shuffle
         self.siamese = siamese
+        self.mine = mine
         self.crop_size = crop_size
         self._dataset()
         self.on_epoch_end()
@@ -130,6 +132,18 @@ class DataGenerator(Sequence):
         # for IIC, we are mostly interested in paired images
         # X and Xbar = G(X)
         if self.siamese:
+            if self.mine:
+                y = np.concatenate([y1, y2], axis=0)
+                m1 = np.copy(x1)
+                m2 = np.copy(x2)
+                np.random.shuffle(m1) 
+                np.random.shuffle(m2)
+
+                x1 =  np.concatenate((x1, m1), axis=0)
+                x2 =  np.concatenate((x2, m2), axis=0)
+                x = (x1, x2)
+                return x, y
+
             x_train = np.concatenate([x1, x2], axis=0)
             y_train = np.concatenate([y1, y2], axis=0)
             y = []

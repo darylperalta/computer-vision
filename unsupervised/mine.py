@@ -7,10 +7,10 @@ from __future__ import division
 from __future__ import print_function
 
 
-from tensorflow.keras.layers import Input, Dense, Add, Activation
+from tensorflow.keras.layers import Input, Dense, Add, Activation, Flatten
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import LearningRateScheduler, Callback
+from tensorflow.keras.callbacks import LearningRateScheduler
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras import backend as K
 from tensorflow.keras.datasets import mnist
@@ -26,14 +26,7 @@ from scipy.stats.contingency import margins
 
 
 from data_generator import DataGenerator
-from utils import unsupervised_labels, center_crop
-
-def mi(model, joint_x1, joint_x2, marginal_x1, marginal_x2):
-    t = model.predict(joint_x1, joint_x2)
-    et = K.exp(model.predcict(marginal_x1, marginal_x2))
-    mi_lb = K.mean(t) - K.log(K.mean(et))
-    return mi_lb, t, et
-
+from utils import unsupervised_labels, center_crop, AccuracyCallback, lr_schedule
 
 def sample(joint=True,
            mean=[0, 0],
@@ -72,42 +65,53 @@ def compute_mi(cov_xy=0.9, n_bins=100):
 
 class SimpleMINE():
     def __init__(self,
-                 args):
+                 args,
+                 input_dim=1,
+                 hidden_units=16,
+                 output_dim=1):
         self.args = args
         self._model = None
-        self.build_model()
+        self.build_model(input_dim,
+                         hidden_units,
+                         output_dim)
 
 
     # build a simple MINE model
-    def build_model(self):
-        inputs1 = Input(shape=(1))
-        inputs2 = Input(shape=(1))
-        x1 = Dense(16)(inputs1)
-        x2 = Dense(16)(inputs2)
+    def build_model(self,
+                    input_dim,
+                    hidden_units,
+                    output_dim):
+        inputs1 = Input(shape=(input_dim))
+        inputs2 = Input(shape=(input_dim))
+        x1 = Dense(hidden_units)(inputs1)
+        x2 = Dense(hidden_units)(inputs2)
         x = Add()([x1, x2])
         x = Activation('relu')(x)
-        outputs = Dense(1)(x)
+        outputs = Dense(output_dim)(x)
         inputs = [inputs1, inputs2]
-        self._model = Model(inputs, outputs, name='MINE')
-        optimizer = Adam(lr=0.01)
-        self._model.compile(optimizer=optimizer, loss=self.loss)
+        self._model = Model(inputs,
+                            outputs,
+                            name='MINE')
         self._model.summary()
 
 
-    # MI loss 
     def loss(self, y_true, y_pred):
         size = self.args.batch_size
         # lower half is pred for joint dist
         pred_xy = y_pred[0: size, :]
+
         # upper half is pred for marginal dist
-        pred_x_y = y_pred[size: y_pred.shape[0], :]
+        pred_x_y = y_pred[size : y_pred.shape[0], :]
         loss = K.mean(pred_xy) \
                - K.log(K.mean(K.exp(pred_x_y)))
         return -loss
 
 
-    # Train MINE to estimate MI between X and Y of a 2D Gaussian
+    # train MINE to estimate MI between X and Y of a 2D Gaussian
     def train(self):
+        optimizer = Adam(lr=0.01)
+        self._model.compile(optimizer=optimizer,
+                            loss=self.loss)
         plot_loss = []
         cov=[[1, self.args.cov_xy], [self.args.cov_xy, 1]]
         loss = 0.
@@ -132,6 +136,135 @@ class SimpleMINE():
                 print("Epoch %d MINE MI: %0.6f" % ((epoch+1), -loss/100))
                 loss = 0.
 
+
+    @property
+    def model(self):
+        return self._model
+
+
+
+class MINE():
+    def __init__(self,
+                 args,
+                 backbone):
+        self.args = args
+        self.backbone = backbone
+        self._model = None
+        self.train_gen = DataGenerator(args, siamese=True, mine=True)
+        self.n_labels = self.train_gen.n_labels
+        self.build_model()
+        self.load_eval_dataset()
+        self.accuracy = 0
+
+
+    def build_model(self):
+        inputs = Input(shape=self.train_gen.input_shape)
+        x = self.backbone(inputs)
+        x = Flatten()(x)
+        y = Dense(self.n_labels,
+                  activation='softmax',
+                  name="class")(x)
+        self._encoder = Model(inputs, y, name="encoder")
+        self._mine = SimpleMINE(self.args,
+                                input_dim=self.n_labels,
+                                hidden_units=4096,
+                                output_dim=1)
+        inputs1 = Input(shape=self.train_gen.input_shape)
+        inputs2 = Input(shape=self.train_gen.input_shape)
+        x1 = self._encoder(inputs1)
+        x2 = self._encoder(inputs2)
+        outputs = self._mine.model([x1, x2])
+
+        self._model = Model([inputs1, inputs2], outputs, name='encoder')
+        optimizer = Adam(lr=1e-3)
+        self._model.compile(optimizer=optimizer, loss=self.loss)
+        self._model.summary()
+
+
+    # MINE loss 
+    def loss(self, y_true, y_pred):
+        size = self.args.batch_size
+        # lower half is pred for joint dist
+        pred_xy = y_pred[0: size, :]
+
+        # upper half is pred for marginal dist
+        pred_x_y = y_pred[size : y_pred.shape[0], :]
+        loss = K.mean(pred_xy) \
+               - K.log(K.mean(K.exp(pred_x_y)))
+        return -loss
+
+
+    # train the model
+    def train(self):
+        accuracy = AccuracyCallback(self)
+        lr_scheduler = LearningRateScheduler(lr_schedule, verbose=1)
+        callbacks = [accuracy, lr_scheduler]
+        self._model.fit_generator(generator=self.train_gen,
+                                  use_multiprocessing=True,
+                                  epochs=self.args.epochs,
+                                  callbacks=callbacks,
+                                  workers=4,
+                                  shuffle=True)
+
+    # pre-load test data for evaluation
+    def load_eval_dataset(self):
+        (_, _), (x_test, self.y_test) = self.args.dataset.load_data()
+        image_size = x_test.shape[1]
+        x_test = np.reshape(x_test,[-1, image_size, image_size, 1])
+        x_test = x_test.astype('float32') / 255
+        x_eval = np.zeros([x_test.shape[0], *self.train_gen.input_shape])
+        for i in range(x_eval.shape[0]):
+            x_eval[i] = center_crop(x_test[i])
+
+        self.x_test = x_eval
+
+
+    # reload model weights for evaluation
+    def load_weights(self):
+        if self.args.restore_weights is None:
+            raise ValueError("Must load model weights for evaluation")
+
+        if self.args.restore_weights:
+            folder = "weights"
+            os.makedirs(folder, exist_ok=True) 
+            path = os.path.join(folder, self.args.restore_weights)
+            print("Loading weights... ", path)
+            self._model.load_weights(path)
+
+
+    # evaluate the accuracy of the current model weights
+    def eval(self):
+        y_pred = self._encoder.predict(self.x_test)
+        print("")
+        y_pred = np.argmax(y_pred, axis=1)
+
+        accuracy = unsupervised_labels(list(self.y_test),
+                                       list(y_pred),
+                                       self.n_labels,
+                                       self.n_labels)
+        info = "Accuracy: %0.2f%%"
+        if self.accuracy > 0:
+            info += ", Old best accuracy: %0.2f%%" 
+            data = (accuracy, self.accuracy)
+        else:
+            data = (accuracy)
+        print(info % data)
+        # if accuracy improves during training, 
+        # save the model weights on a file
+        if accuracy > self.accuracy \
+            and self.args.save_weights is not None:
+            folder = self.args.save_dir
+            os.makedirs(folder, exist_ok=True) 
+            path = os.path.join(folder, self.args.save_weights)
+            print("Saving weights... ", path)
+            self._model.save_weights(path)
+
+        if accuracy > self.accuracy: 
+            self.accuracy = accuracy
+
+    @property
+    def model(self):
+        return self._model
 
 
 if __name__ == '__main__':
@@ -159,8 +292,42 @@ if __name__ == '__main__':
                         default=10000,
                         metavar='N',
                         help='Train batch size')
+    parser.add_argument('--gaussian',
+                        default=False,
+                        action='store_true',
+                        help='Compute MI of 2D Gaussian')
+    parser.add_argument('--plot-model',
+                        default=False,
+                        action='store_true',
+                        help='Plot all network models')
+    parser.add_argument('--train',
+                        default=False,
+                        action='store_true',
+                        help='Train the model')
+    parser.add_argument('--heads',
+                        type=int,
+                        default=1,
+                        metavar='N',
+                        help='Number of heads')
+
     args = parser.parse_args()
     print("Covariace off diagonal:", args.cov_xy)
-    simple_mine = SimpleMINE(args)
-    simple_mine.train()
-    compute_mi(cov_xy=args.cov_xy)
+    if args.gaussian:
+        simple_mine = SimpleMINE(args)
+        simple_mine.train()
+        compute_mi(cov_xy=args.cov_xy)
+    else:
+        # build backbone
+        backbone = vgg.VGG(vgg.cfg['F'])
+        backbone.model.summary()
+        # instantiate MINE object
+        mine = MINE(args, backbone.model)
+        if args.plot_model:
+            plot_model(backbone.model,
+                       to_file="backbone-vgg.png",
+                       show_shapes=True)
+            plot_model(mine.model,
+                       to_file="model-mine.png",
+                       show_shapes=True)
+        if args.train:
+            mine.train()
