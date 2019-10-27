@@ -22,10 +22,7 @@ import argparse
 import vgg
 
 import matplotlib.pyplot as plt
-import seaborn as sns
 from scipy.stats.contingency import margins
-
-
 from data_generator import DataGenerator
 from utils import unsupervised_labels, center_crop, AccuracyCallback, lr_schedule
 
@@ -103,6 +100,7 @@ class SimpleMINE():
                             outputs,
                             name='MINE')
         self._model.summary()
+
 
     # MINE loss function
     def loss(self, y_true, y_pred):
@@ -334,13 +332,16 @@ class MINE():
         if accuracy > self.accuracy: 
             self.accuracy = accuracy
 
+
     @property
     def model(self):
         return self._model
 
+
     @property
     def encoder(self):
         return self._encoder
+
 
     @property
     def classifier(self):
@@ -356,10 +357,10 @@ if __name__ == '__main__':
                         help='Gaussian off diagonal element')
     parser.add_argument('--save-dir',
                        default="weights",
-                       help='Folder for storing model weights (h5)')
+                       help='Folder for storing model weights')
     parser.add_argument('--save-weights',
                        default=None,
-                       help='Folder for storing model weights (h5)')
+                       help='Filename (dim added) of model weights (h5).')
     parser.add_argument('--dataset',
                        default=mnist,
                        help='Dataset to use')
@@ -385,16 +386,18 @@ if __name__ == '__main__':
                         default=False,
                         action='store_true',
                         help='Train the model')
-    parser.add_argument('--heads',
-                        type=int,
-                        default=1,
-                        metavar='N',
-                        help='Number of heads')
     parser.add_argument('--latent-dim',
                         type=int,
                         default=10,
                         metavar='N',
                         help='MNIST encoder latent dim')
+    parser.add_argument('--restore-weights',
+                        default=None,
+                        help='Restore saved model weights')
+    parser.add_argument('--eval',
+                        default=False,
+                        action='store_true',
+                        help='Evaluate a pre trained model. Must indicate weights file.')
 
     args = parser.parse_args()
     if args.gaussian:
@@ -424,3 +427,7 @@ if __name__ == '__main__':
                        show_shapes=True)
         if args.train:
             mine.train()
+    
+        if args.eval:
+            mine.load_weights()
+            mine.eval()
