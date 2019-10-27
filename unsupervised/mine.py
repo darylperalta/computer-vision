@@ -29,41 +29,50 @@ from scipy.stats.contingency import margins
 from data_generator import DataGenerator
 from utils import unsupervised_labels, center_crop, AccuracyCallback, lr_schedule
 
+# get samples fr a bivariate Gaussian dist
 def sample(joint=True,
            mean=[0, 0],
-           cov=[[1, 0.9], [0.9, 1]],
+           cov=[[1, 0.5], [0.5, 1]],
            n_data=1000000):
     xy = np.random.multivariate_normal(mean=mean,
                                        cov=cov,
                                        size=n_data)
+    # samples fr joint distribution
     if joint:
         return xy 
     y = np.random.multivariate_normal(mean=mean,
                                       cov=cov,
                                       size=n_data)
+
+    # samples fr marginal distribution
     x = xy[:,0].reshape(-1,1)
     y = y[:,1].reshape(-1,1)
    
     xy = np.concatenate([x, y], axis=1)
     return xy
 
-
-def compute_mi(cov_xy=0.9, n_bins=100):
+# manual computation of MI
+def compute_mi(cov_xy=0.5, n_bins=100):
     cov=[[1, cov_xy], [cov_xy, 1]]
     data = sample(cov=cov)
+    # get joint distribution samples
+    # perform histogram binning
     joint, edge = np.histogramdd(data, bins=n_bins)
     joint /= joint.sum()
     eps = np.finfo(float).eps
     joint[joint<eps] = eps
+    # compute marginal distributions
     x, y = margins(joint)
+
     xy = x*y
     xy[xy<eps] = eps
+    # MI is P(X,Y)*log(P(X,Y)/P(X)*P(Y))
     mi = joint*np.log(joint/xy)
     mi = mi.sum()
     print("Computed MI: %0.6f" % mi)
     return mi
 
-
+# learn to compute MI using MINE
 class SimpleMINE():
     def __init__(self,
                  args,
@@ -82,20 +91,20 @@ class SimpleMINE():
                     input_dim,
                     hidden_units,
                     output_dim):
-        inputs1 = Input(shape=(input_dim))
-        inputs2 = Input(shape=(input_dim))
+        inputs1 = Input(shape=(input_dim), name="x")
+        inputs2 = Input(shape=(input_dim), name="y")
         x1 = Dense(hidden_units)(inputs1)
         x2 = Dense(hidden_units)(inputs2)
         x = Add()([x1, x2])
-        x = Activation('relu')(x)
-        outputs = Dense(output_dim)(x)
+        x = Activation('relu', name="ReLU")(x)
+        outputs = Dense(output_dim, name="MI")(x)
         inputs = [inputs1, inputs2]
         self._model = Model(inputs,
                             outputs,
                             name='MINE')
         self._model.summary()
 
-
+    # MINE loss function
     def loss(self, y_true, y_pred):
         size = self.args.batch_size
         # lower half is pred for joint dist
@@ -117,25 +126,35 @@ class SimpleMINE():
         cov=[[1, self.args.cov_xy], [self.args.cov_xy, 1]]
         loss = 0.
         for epoch in range(self.args.epochs):
+            # joint dist samples
             xy = sample(n_data=self.args.batch_size,
                         cov=cov)
             x1 = xy[:,0].reshape(-1,1)
             y1 = xy[:,1].reshape(-1,1)
+            # marginal dist samples
             xy = sample(joint=False,
                         n_data=self.args.batch_size,
                         cov=cov)
             x2 = xy[:,0].reshape(-1,1)
             y2 = xy[:,1].reshape(-1,1)
     
+            # train on batch of joint & marginal samples
             x =  np.concatenate((x1, x2))
             y =  np.concatenate((y1, y2))
             loss_item = self._model.train_on_batch([x, y],
                                                    np.zeros(x.shape))
             loss += loss_item
-            plot_loss.append(loss_item)
+            plot_loss.append(-loss_item)
             if (epoch + 1) % 100 == 0:
-                print("Epoch %d MINE MI: %0.6f" % ((epoch+1), -loss/100))
+                fmt = "Epoch %d MINE MI: %0.6f" 
+                print(fmt % ((epoch+1), -loss/100))
                 loss = 0.
+
+        plt.plot(plot_loss, color='black')
+        plt.xlabel('epoch')
+        plt.ylabel('MI')
+        plt.savefig("simple_mine_mi.png", dpi=300, color='black')
+        plt.show()
 
 
     @property
@@ -152,9 +171,11 @@ class LinearClassifier():
 
 
     def build_model(self, latent_dim, n_classes):
-        inputs = Input(shape=(latent_dim,))
+        inputs = Input(shape=(latent_dim,), name="cluster")
         x = Dense(256)(inputs)
-        outputs = Dense(n_classes, activation='softmax')(x)
+        outputs = Dense(n_classes,
+                        activation='softmax',
+                        name="class")(x)
         name = "classifier"
         self._model = Model(inputs, outputs, name=name)
         self._model.compile(loss='categorical_crossentropy',
@@ -178,6 +199,12 @@ class LinearClassifier():
         return accuracy
 
 
+    @property
+    def model(self):
+        return self._model
+
+
+
 class MINE():
     def __init__(self,
                  args,
@@ -186,6 +213,7 @@ class MINE():
         self.latent_dim = args.latent_dim
         self.backbone = backbone
         self._model = None
+        self._encoder = None
         self.train_gen = DataGenerator(args, siamese=True, mine=True)
         self.n_labels = self.train_gen.n_labels
         self.build_model()
@@ -193,7 +221,7 @@ class MINE():
 
 
     def build_model(self):
-        inputs = Input(shape=self.train_gen.input_shape)
+        inputs = Input(shape=self.train_gen.input_shape, name="input")
         x = self.backbone(inputs)
         x = Flatten()(x)
         y = Dense(self.latent_dim,
@@ -204,8 +232,10 @@ class MINE():
                                 input_dim=self.latent_dim,
                                 hidden_units=1024,
                                 output_dim=1)
-        inputs1 = Input(shape=self.train_gen.input_shape)
-        inputs2 = Input(shape=self.train_gen.input_shape)
+        inputs1 = Input(shape=self.train_gen.input_shape,
+                        name="x")
+        inputs2 = Input(shape=self.train_gen.input_shape,
+                        name="y")
         x1 = self._encoder(inputs1)
         x2 = self._encoder(inputs2)
         outputs = self._mine.model([x1, x2])
@@ -274,7 +304,11 @@ class MINE():
 
     # evaluate the accuracy of the current model weights
     def eval(self):
+        # generate clustering predictions fr test data
         y_pred = self._encoder.predict(self.x_test)
+        # train a linear classifier
+        # input: clustered data
+        # output: ground truth labels
         self._classifier.train(y_pred, self.y_test)
         accuracy = self._classifier.eval(y_pred, self.y_test)
 
@@ -291,7 +325,8 @@ class MINE():
             and self.args.save_weights is not None:
             folder = self.args.save_dir
             os.makedirs(folder, exist_ok=True) 
-            filename = "%d-dim-%s" % (self.latent_dim, self.args.save_weights)
+            args = (self.latent_dim, self.args.save_weights)
+            filename = "%d-dim-%s" % args
             path = os.path.join(folder, filename)
             print("Saving weights... ", path)
             self._model.save_weights(path)
@@ -302,6 +337,15 @@ class MINE():
     @property
     def model(self):
         return self._model
+
+    @property
+    def encoder(self):
+        return self._encoder
+
+    @property
+    def classifier(self):
+        return self._classifier
+
 
 
 if __name__ == '__main__':
@@ -358,6 +402,10 @@ if __name__ == '__main__':
         simple_mine = SimpleMINE(args)
         simple_mine.train()
         compute_mi(cov_xy=args.cov_xy)
+        if args.plot_model:
+            plot_model(simple_mine.model,
+                       to_file="simple_mine.png",
+                       show_shapes=True)
     else:
         # build backbone
         backbone = vgg.VGG(vgg.cfg['F'])
@@ -365,8 +413,11 @@ if __name__ == '__main__':
         # instantiate MINE object
         mine = MINE(args, backbone.model)
         if args.plot_model:
-            plot_model(backbone.model,
-                       to_file="backbone-vgg.png",
+            plot_model(mine.classifier.model,
+                       to_file="classifier.png",
+                       show_shapes=True)
+            plot_model(mine.encoder,
+                       to_file="encoder.png",
                        show_shapes=True)
             plot_model(mine.model,
                        to_file="model-mine.png",
