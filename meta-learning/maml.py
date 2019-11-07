@@ -29,8 +29,12 @@ class SimpleMAML(nn.Module):
         nn.init.kaiming_normal_(self.fc1.weight)
         nn.init.kaiming_normal_(self.fc2.weight)
         nn.init.kaiming_normal_(self.fc3.weight)
+        self.fc1.bias.data.fill_(0.01)
+        self.fc2.bias.data.fill_(0.01)
+        self.fc3.bias.data.fill_(0.01)
         self.sample_means()
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=self.args.lr)
+        self.meta_optim = torch.optim.Adam(self.parameters(), lr=self.args.meta_lr)
+        self.update_optim = torch.optim.Adam(self.parameters(), lr=self.args.update_lr)
 
 
     def sample_means(self):
@@ -53,6 +57,7 @@ class SimpleMAML(nn.Module):
 
 
     def sample_input(self, mean, batch_size, n_samples):
+        # sample input data fr gaussian dist
         samples = np.random.normal(mean, size=(batch_size, n_samples))
         samples = np.reshape(samples, (batch_size, n_samples))
         samples = torch.from_numpy(samples)
@@ -60,7 +65,9 @@ class SimpleMAML(nn.Module):
         samples = samples.to(self.device)
         return samples
 
+
     def sample_target(self, mean, batch_size):
+        # sample of output data (mean)
         mean = np.repeat(mean, batch_size)
         mean = np.reshape(mean, (batch_size, -1))
         mean = torch.from_numpy(mean)
@@ -68,9 +75,10 @@ class SimpleMAML(nn.Module):
         mean = mean.to(self.device)
         return mean
 
+
     def train(self, test=False):
         # number of task samples fr distribution of tasks
-        n_task_samples = self.args.n_tasks // 2 
+        n_task_samples = self.args.n_tasks #// 2 
         # number of data points as model input
         n_samples = self.args.n_samples
         # initial theta before update
@@ -79,14 +87,14 @@ class SimpleMAML(nn.Module):
         scalar_losses = []
         mse = nn.MSELoss()
         if test:
-            # 1-way, 1-shot meta-testing
-            n_epochs = 1
             data = self.held_out
             indexes = [0]
-            batch_size = 1
+            #n_epochs = self.args.n_epochs
+            n_epochs = 1
+            batch_size = self.args.batch_size
         else:
-            n_epochs = self.args.n_epochs
             data = self.means
+            n_epochs = self.args.n_epochs
             batch_size = self.args.batch_size
 
         for epoch in range(n_epochs):
@@ -99,6 +107,7 @@ class SimpleMAML(nn.Module):
             if not test:
                 # during meta-training, sample fr distribution of tasks
                 indexes = np.random.randint(0, self.args.n_tasks, n_task_samples)
+            # meta-learning
             for index in indexes:
                 # train per sampled task
                 for p, x in zip(self.params, theta):
@@ -113,9 +122,9 @@ class SimpleMAML(nn.Module):
                 #scalar_losses.append(loss.item())
 
                 # compute phi
-                self.optimizer.zero_grad()
+                self.meta_optim.zero_grad()
                 loss.backward()
-                self.optimizer.step()
+                self.meta_optim.step()
 
                 # save phi (theta prime)
                 phi = [p.clone().detach() for p in list(self.parameters())]
@@ -125,6 +134,7 @@ class SimpleMAML(nn.Module):
                 if not test:
                     print(mean[0], y[0])
 
+            # adaptation
             for phi, index in zip(phis, indexes):
                 for p, x in zip(self.params, phi):
                     p.data.copy_(x)
@@ -140,19 +150,18 @@ class SimpleMAML(nn.Module):
             for p, x in zip(self.params, theta):
                 p.data.copy_(x)
             loss = total_loss / self.args.n_tasks
-            self.optimizer.zero_grad()
+            self.update_optim.zero_grad()
             loss.backward()
-            self.optimizer.step()
+            self.update_optim.step()
             # observe prediction after meta-testing
             if test:
                 y = self(samples)
                 mean = mean[0].data.cpu()
                 y = y[0].data.cpu()
-                print("")
                 print("Meta-test:") 
                 print("Ground truth: %0.6f, Prediction: %0.6f: " % (mean, y))
-                print("")
-                print("Meta-train tasks: ", self.means)
+                #print("")
+                #print("Meta-train tasks: ", self.means)
 
 
     # observe prediction before meta-testing
@@ -163,9 +172,9 @@ class SimpleMAML(nn.Module):
             samples = self.sample_input(mean, 1, n_samples)
             y = self(samples)
             y = y[0].data.cpu()
-            print("")
-            print("Without meta-testing: ")
-            print("Ground truth: %0.6f, Prediction: %0.6f: " % (mean, y))
+            pre_eval = "Without meta-testing: \n"
+            pre_eval += "Ground truth: %0.6f, Prediction: %0.6f: " % (mean, y)
+            return pre_eval
         
 
 
@@ -181,22 +190,28 @@ if __name__ == '__main__':
                         help='Number of tasks (# of 1D Gaussians)')
     parser.add_argument('--n-epochs',
                         type=int,
-                        default=1000,
+                        default=100,
                         help='Number of epochs')
     parser.add_argument('--batch-size',
                         type=int,
-                        default=128,
-                        help='Batch size')
-    parser.add_argument('--lr',
+                        default=1,
+                        help='Batch size (k-shot = batch_size)')
+    parser.add_argument('--update-lr',
                         type=float,
                         default=1e-3,
-                        help='Learning rate')
+                        help='update learning rate')
+    parser.add_argument('--meta-lr',
+                        type=float,
+                        default=5e-4,
+                        help='meta learning rate')
+
+    torch.manual_seed(9007965514248702052)
     args = parser.parse_args()
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
     print("Training on ", device)
     simple_maml = SimpleMAML(args, device).to(device)
     simple_maml.train()
-    simple_maml.eval()
+    pre_eval = simple_maml.eval()
     simple_maml.train(test=True)
-
+    print(pre_eval)

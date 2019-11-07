@@ -122,8 +122,9 @@ class DataGenerator(Sequence):
                 choice = np.random.randint(0, 4)
                 # 50-50% chance of crop or rotate
                 if choice < 2:
+                    shape = target_shape[1:]
                     x2[i] = self.random_rotate(image,
-                                               target_shape=target_shape[1:])
+                                               target_shape=shape)
                 else:
                     x2[i] = self.random_crop(image,
                                              target_shape[1:],
