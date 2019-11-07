@@ -1,6 +1,6 @@
 '''Demonstrates MAML by learning to predict a Gaussian dist mean
 
-python3 maml.py --n-samples=1000 --n-epochs=200 --batch-size=128
+python3 maml.py
 
 '''
 
@@ -182,7 +182,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='MAML on 1D Gaussian')
     parser.add_argument('--n-samples',
                         type=int,
-                        default=1000,
+                        default=2000,
                         help='Number of samples per task')
     parser.add_argument('--n-tasks',
                         type=int,
@@ -190,7 +190,7 @@ if __name__ == '__main__':
                         help='Number of tasks (# of 1D Gaussians)')
     parser.add_argument('--n-epochs',
                         type=int,
-                        default=100,
+                        default=50,
                         help='Number of epochs')
     parser.add_argument('--batch-size',
                         type=int,
@@ -205,7 +205,9 @@ if __name__ == '__main__':
                         default=5e-4,
                         help='meta learning rate')
 
-    torch.manual_seed(9007965514248702052)
+    #torch.manual_seed(9007965514248702052)
+    torch.manual_seed(104029687756708413)
+    seed = torch.seed()
     args = parser.parse_args()
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
@@ -215,3 +217,4 @@ if __name__ == '__main__':
     pre_eval = simple_maml.eval()
     simple_maml.train(test=True)
     print(pre_eval)
+    print(seed)
