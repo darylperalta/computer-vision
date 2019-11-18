@@ -369,7 +369,8 @@ class SSD:
         classes = np.squeeze(classes)
         # classes = np.argmax(classes, axis=1)
         offsets = np.squeeze(offsets)
-        class_names, rects, _, _ = show_boxes(image,
+        class_names, rects, _, _ = show_boxes(args,
+                                              image,
                                               classes,
                                               offsets,
                                               self.feature_shapes,
