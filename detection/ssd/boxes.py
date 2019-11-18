@@ -62,7 +62,7 @@ def nms(args, classes, offsets, anchors):
         nonbg = nonbg[nonbg != score_idx]
 
         # if obj probability is less than threshold
-        if score_max < self.args.class_threshold:
+        if score_max < args.class_threshold:
             # we are done
             break
 
@@ -82,12 +82,12 @@ def nms(args, classes, offsets, anchors):
             box = np.expand_dims(box, axis=0)
             iou = layer_utils.iou(box, score_box)[0][0]
             # if soft NMS is chosen (Line 7)
-            if self.args.soft_nms:
+            if args.soft_nms:
                 # adjust score: Line 8
                 iou = -2 * iou * iou
                 classes[idx] *= math.exp(iou)
             # else NMS (Line 9)
-            elif iou >= self.args.iou_thresh:
+            elif iou >= args.iou_thresh:
                 # remove overlapping predictions with iou>threshold
                 # Line 10
                 nonbg = nonbg[nonbg != idx]
