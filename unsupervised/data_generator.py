@@ -92,6 +92,7 @@ class DataGenerator(Sequence):
         image = resize(image, target_shape)
         return image
 
+
     # random image rotation
     def random_rotate(self, image, deg=20, target_shape=(24, 24, 1)):
         choice = np.random.randint(-deg, deg)
