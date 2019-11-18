@@ -125,7 +125,7 @@ def show_boxes(args,
     # generate all anchors per feature map
     anchors = []
     n_layers = len(feature_shapes)
-    for index, feture_shape in enumerate(feature_shapes):
+    for index, feature_shape in enumerate(feature_shapes):
         anchor = anchor_boxes(feature_shape,
                               image.shape,
                               index=index)
