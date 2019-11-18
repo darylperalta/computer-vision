@@ -8,28 +8,23 @@ and bounding box offsets
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from __future__ import unicode_literals
 
 import numpy as np
 import config
 import math
-from keras import backend as K
+from tensorflow.keras import backend as K
 
-def anchor_sizes_new(n_layers=6):
-    # dx = np.linspace(0.2, 0.9, n_layers + 1)
-    # size = [d[i], (d[i] * 0.5)]
-    # s = np.linspace(0.2, 0.9, n_layers + 1)
+def anchor_sizes(n_layers=4):
+    """Generate linear distribution of sizes depending on 
+    the number of ssd top layers
 
-    s = [min((1/40)*2**i, 1.0) for i in range(0, n_layers + 1)]
-    sizes = []
-    for i in range(len(s)-1):
-        size = [s[i], math.sqrt(s[i] * s[i + 1])]
-        sizes.append(size)
-    return sizes
+    Arguments:
+        n_layers (int): Number of ssd head layers
 
-
-# linear distribution of sizes depending on 
-# the number of ssd top layers
-def anchor_sizes(n_layers=6):
+    Returns:
+        sizes (list): A list of anchor sizes
+    """
     s = np.linspace(0.2, 0.9, n_layers + 1)
     sizes = []
     for i in range(len(s) - 1):
@@ -39,99 +34,128 @@ def anchor_sizes(n_layers=6):
 
     return sizes
 
-# aspect ratios
-def anchor_aspect_ratios():
-    aspect_ratios = config.params['aspect_ratios']
-    return aspect_ratios
 
-
-# compute the anchor boxes per feature map
-# anchor boxes are in minmax format
 def anchor_boxes(feature_shape,
                  image_shape,
                  index=0,
-                 n_layers=6):
+                 n_layers=4,
+                 aspect_ratios=(1, 2, 0.5)):
+    """ Compute the anchor boxes per feature map
+    anchor boxes are in minmax format
+
+    Arguments:
+        feature_shape (list): feature map shape
+        image_shape (list): image size shape
+        index (int): indicates which of ssd head n_layers
+            are we referring to
+        n_layers (int): Number of ssd head layers
+
+    Returns:
+        list of anchor boxes 
+
+    """
     
+    # anchor box sizes
     sizes = anchor_sizes(n_layers)[index]
-    aspect_ratios = anchor_aspect_ratios()
-    # print("index: ", index, "sizes: ", sizes)
     # -1 bec only 1 of the 2 sizes is used
     n_boxes = len(aspect_ratios) + len(sizes) - 1
     image_height, image_width, _ = image_shape
-    _, feature_height, feature_width, _ = feature_shape
+    # ignore number of feature maps (last)
+    feature_height, feature_width, _ = feature_shape
 
-    norm_width = image_width * sizes[0]
+    # normalized width and height
+    # I think 0 should be index since this is normalized wrt layer num
     norm_height = image_height * sizes[0]
+    norm_width = image_width * sizes[0]
 
-    wh_list = []
+    # list of anchor boxes (width, height)
+    width_height = []
     # anchor box by aspect ratio on resized image dims
+    # Equation 11.2.3 in Chapter 11
     for ar in aspect_ratios:
         box_height = norm_height / np.sqrt(ar)
         box_width = norm_width * np.sqrt(ar)
-        wh_list.append((box_width, box_height))
+        width_height.append((box_width, box_height))
     # anchor box by size[1] for aspect_ratio = 1
+    # Equation 11.2.4 in Chapter 11
     for size in sizes[1:]:
         box_height = image_height * size
         box_width = image_width * size
-        wh_list.append((box_width, box_height))
+        width_height.append((box_width, box_height))
 
-    wh_list = np.array(wh_list)
+    # now an array of (width, height)
+    width_height = np.array(width_height)
 
+    # dimensions of each receptive field in pixels
     grid_width = image_width / feature_width
     grid_height = image_height / feature_height
+
+    # compute center of receptive field per feature pt
+    # (cx, cy) format 
+    # starting at midpoint of 1st receptive field
+    start = grid_width * 0.5 
+    # ending at midpoint of last receptive field
+    end = (feature_width - 0.5) * grid_width
+    cx = np.linspace(start, end, feature_width)
 
     start = grid_height * 0.5
     end = (feature_height - 0.5) * grid_height
     cy = np.linspace(start, end, feature_height)
 
-    start = grid_width * 0.5 
-    end = (feature_width - 0.5) * grid_width
-    cx = np.linspace(start, end, feature_width)
-
     # grid of box centers
     cx_grid, cy_grid = np.meshgrid(cx, cy)
+
     # for np.tile()
     cx_grid = np.expand_dims(cx_grid, -1) 
     cy_grid = np.expand_dims(cy_grid, -1)
+
     # tensor = (feature_map_height, feature_map_width, n_boxes, 4)
     # last dimension = (cx, cy, w, h)
-    boxes_tensor = np.zeros((feature_height, feature_width, n_boxes, 4))
-    boxes_tensor[:, :, :, 0] = np.tile(cx_grid, (1, 1, n_boxes))
-    boxes_tensor[:, :, :, 1] = np.tile(cy_grid, (1, 1, n_boxes))
-    boxes_tensor[:, :, :, 2] = wh_list[:, 0]
-    boxes_tensor[:, :, :, 3] = wh_list[:, 1]
+    boxes = np.zeros((feature_height, feature_width, n_boxes, 4))
+    
+    # orig which may be wrong
+    #boxes[..., 0] = np.tile(cy_grid, (1, 1, n_boxes))
+    #boxes[..., 1] = np.tile(cx_grid, (1, 1, n_boxes))
+
+    #should this be the correct
+    boxes[..., 0] = np.tile(cx_grid, (1, 1, n_boxes))
+    boxes[..., 1] = np.tile(cy_grid, (1, 1, n_boxes))
+
+    boxes[..., 2] = width_height[:, 0]
+    boxes[..., 3] = width_height[:, 1]
     # convert (cx, cy, w, h) to (xmin, xmax, ymin, ymax)
-    # prepend one dimension to boxes_tensor 
+    # prepend one dimension to boxes 
     # to account for the batch size and tile it along
     # the result will be a 5D tensor of shape 
     # (batch_size, feature_map_height, feature_map_width, n_boxes, 4)
-    boxes_tensor = centroid2minmax(boxes_tensor)
-    boxes_tensor = np.expand_dims(boxes_tensor, axis=0)
-    boxes_tensor = np.tile(boxes_tensor, 
-                           (feature_shape[0], 1, 1, 1, 1))
-    return boxes_tensor
+    boxes = centroid2minmax(boxes)
+    boxes = np.expand_dims(boxes, axis=0)
+    #boxes = np.tile(boxes, (feature_shape[0], 1, 1, 1, 1))
+    #boxes = np.tile(boxes, (feature_shape[0], 1, 1, 1, 1))
+    return boxes
 
-# centroid format to minmax format 
-# (cx, cy, w, h) to (xmin, xmax, ymin, ymax)
-def centroid2minmax(boxes_tensor):
-    tensor = np.copy(boxes_tensor).astype(np.float)
-    tensor[..., 0] = boxes_tensor[..., 0] - (0.5 * boxes_tensor[..., 2])
-    tensor[..., 1] = boxes_tensor[..., 0] + (0.5 * boxes_tensor[..., 2])
-    tensor[..., 2] = boxes_tensor[..., 1] - (0.5 * boxes_tensor[..., 3])
-    tensor[..., 3] = boxes_tensor[..., 1] + (0.5 * boxes_tensor[..., 3])
-    return tensor
+def centroid2minmax(boxes):
+    """Centroid format to minmax format 
+    (cx, cy, w, h) to (xmin, xmax, ymin, ymax)
+    """
+    minmax= np.copy(boxes).astype(np.float)
+    minmax[..., 0] = boxes[..., 0] - (0.5 * boxes[..., 2])
+    minmax[..., 1] = boxes[..., 0] + (0.5 * boxes[..., 2])
+    minmax[..., 2] = boxes[..., 1] - (0.5 * boxes[..., 3])
+    minmax[..., 3] = boxes[..., 1] + (0.5 * boxes[..., 3])
+    return minmax
 
 # minmax to centroid format
 # (xmin, xmax, ymin, ymax) to (cx, cy, w, h)
-def minmax2centroid(boxes_tensor):
-    tensor = np.copy(boxes_tensor).astype(np.float)
-    tensor[..., 0] = 0.5 * (boxes_tensor[..., 1] - boxes_tensor[..., 0])
-    tensor[..., 0] += boxes_tensor[..., 0] 
-    tensor[..., 1] = 0.5 * (boxes_tensor[..., 3] - boxes_tensor[..., 2])
-    tensor[..., 1] += boxes_tensor[..., 2] 
-    tensor[..., 2] = boxes_tensor[..., 1] - boxes_tensor[..., 0]
-    tensor[..., 3] = boxes_tensor[..., 3] - boxes_tensor[..., 2]
-    return tensor
+def minmax2centroid(boxes):
+    centroid = np.copy(boxes).astype(np.float)
+    centroid[..., 0] = 0.5 * (boxes[..., 1] - boxes[..., 0])
+    centroid[..., 0] += boxes[..., 0] 
+    centroid[..., 1] = 0.5 * (boxes[..., 3] - boxes[..., 2])
+    centroid[..., 1] += boxes[..., 2] 
+    centroid[..., 2] = boxes[..., 1] - boxes[..., 0]
+    centroid[..., 3] = boxes[..., 3] - boxes[..., 2]
+    return centroid
 
 # compute intersection of boxes1 and boxes2
 def intersection(boxes1, boxes2):

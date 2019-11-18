@@ -80,20 +80,23 @@ def lr_scheduler(epoch):
 
 
 class SSD:
-    """
+    """SSD holds a ssd network model and a dataset generator.
+    SSD also defines obj detection loss functions and performs
+    training and validation.
 
-    Argumennts:
-    args: User-defined configurations
+    # Argumennts:
+        args: User-defined configurations
+
+    # Properties:
+        ssd (model): SSD network model
+        train_generator: multi-threaded data generator
 
     """
     def __init__(self, args):
+        """Copy user-defined configs
+        Build backbone and ssd network models
+        """
         self.args = args
-        #self.n_layers = n_layers
-        #self.batch_size = batch_size
-        #self.epochs = epochs
-        #self.workers = workers
-        #self.normalize = normalize
-
         self.train_generator = None
         self.test_generator = None
         self.build_model()
@@ -112,12 +115,14 @@ class SSD:
                             self.args.channels)
 
         # build the backbone network (eg ResNet50)
-        # the number of output layers is equal to n_layers
+        # the number of feature layers is equal to n_layers
+        # feature layers are inputs to SSD network heads
+        # for class and offsets predictions
         self.backbone = self.args.backbone(self.input_shape,
                                            n_layers=self.args.layers)
 
         # using the backbone, build ssd network
-        # outputs of ssd are class and bounding box predictions
+        # outputs of ssd are class and offsets predictions
         anchors, features, ssd = build_ssd(self.input_shape,
                                            self.backbone,
                                            n_layers=self.args.layers,
@@ -127,11 +132,30 @@ class SSD:
         # feature_shapes is a list of feature map shapes
         # per output layer
         self.feature_shapes = features
-        # ssd model
+        print(self.feature_shapes)
+        # SSD network model
         self.ssd = ssd
 
 
+    def build_dictionary(self):
+        """Reads the input image filenames and obj detection labels
+        from a csv file
+        """
+        # load dataset path
+        csv_path = os.path.join(self.args.data_path,
+                                self.args.train_labels)
+
+        # build dictionary: 
+        # key=image filaname, value=box coords + class label
+        # self.classes is a list of class labels
+        self.dictionary, self.classes  = build_label_dictionary(csv_path)
+        self.n_classes = len(self.classes)
+        self.keys = np.array(list(self.dictionary.keys()))
+
+
     def print_summary(self):
+        """Print network summary for debugging purposes
+        """
         from tensorflow.keras.utils import plot_model
         if self.args.summary:
             self.backbone.summary()
@@ -142,17 +166,17 @@ class SSD:
 
 
     def build_generator(self):
-        # multi-thread train data generator
-        gen = DataGenerator(dictionary=self.dictionary,
-                            n_classes=self.n_classes,
-                            input_shape=self.input_shape,
-                            feature_shapes=self.feature_shapes,
-                            n_anchors=self.n_anchors,
-                            n_layers=self.n_layers,
-                            batch_size=self.batch_size,
-                            shuffle=True,
-                            normalize=self.normalize)
-        self.train_generator = gen
+        """Build a multi-thread train data generator
+        """
+        self.train_generator = DataGenerator(dictionary=self.dictionary,
+                                             n_classes=self.n_classes,
+                                             input_shape=self.input_shape,
+                                             feature_shapes=self.feature_shapes,
+                                             n_anchors=self.n_anchors,
+                                             n_layers=self.args.layers,
+                                             batch_size=self.args.batch_size,
+                                             shuffle=True,
+                                             normalize=self.args.normalize)
 
         return
         # we skip the test data generator since it is time consuming
@@ -167,18 +191,9 @@ class SSD:
                                             shuffle=True)
 
 
-    def build_dictionary(self):
-        # load dataset path
-        csv_path = os.path.join(config.params['data_path'],
-                                config.params['train_labels'])
-
-        # build dictionary and key
-        self.dictionary, self.classes  = build_label_dictionary(csv_path)
-        self.n_classes = len(self.classes)
-        self.keys = np.array(list(self.dictionary.keys()))
-
-
     def focal_loss_ce(self, y_true, y_pred):
+        """Alternative CE focal loss (not used)
+        """
         # only missing in this FL is y_pred clipping
         weight = (1 - y_pred)
         weight *= weight
@@ -186,7 +201,10 @@ class SSD:
         weight *= 0.25
         return K.categorical_crossentropy(weight*y_true, y_pred)
 
+
     def focal_loss_binary(self, y_true, y_pred):
+        """Binary cross-entropy focal loss
+        """
         gamma = 2.0
         alpha = 0.25
 
@@ -211,6 +229,8 @@ class SSD:
 
 
     def focal_loss_categorical(self, y_true, y_pred):
+        """Categorical cross-entropy focal loss
+        """
         gamma = 2.0
         alpha = 0.25
 
@@ -231,6 +251,8 @@ class SSD:
         return K.sum(cross_entropy, axis=-1)
 
     def mask_offset(self, y_true, y_pred): 
+        """Pre-process ground truth and prediction data
+        """
         # 1st 4 are offsets
         offset = y_true[..., 0:4]
         # last 4 are mask
@@ -245,29 +267,35 @@ class SSD:
 
 
     def l1_loss(self, y_true, y_pred):
+        """MAE or L1 loss
+        """
         offset, pred = self.mask_offset(y_true, y_pred)
         # we can use L1
         return K.mean(K.abs(pred - offset), axis=-1)
 
 
     def smooth_l1_loss(self, y_true, y_pred):
+        """Smooth L1 loss using tensorflow Huber loss
+        """
         offset, pred = self.mask_offset(y_true, y_pred)
         # Huber loss as approx of smooth L1
         return Huber()(offset, pred)
 
 
-    def train_model(self,
-                    improved_loss=False,
-                    smooth_l1=False):
+    def train(self):
+        """Train the SSD network
+        """
+        # build the train data generator
         if self.train_generator is None:
             self.build_generator()
 
         optimizer = Adam(lr=1e-3)
         print("# classes", self.n_classes)
-        if improved_loss:
+        # choice of loss functions via args
+        if self.args.improved_loss:
             print("Focal loss and smooth L1")
             loss = [self.focal_loss_categorical, self.smooth_l1_loss]
-        elif smooth_l1:
+        elif self.args.smooth_l1:
             print("Smooth L1")
             loss = ['categorical_crossentropy', self.smooth_l1_loss]
         else:
@@ -276,33 +304,35 @@ class SSD:
 
         self.ssd.compile(optimizer=optimizer, loss=loss)
 
+        # model weights are saved for future validation
         # prepare model model saving directory.
-        save_dir = os.path.join(os.getcwd(), 'saved_models')
+        save_dir = os.path.join(os.getcwd(), self.args.save_dir)
         model_name = self.backbone.name
-        model_name += '_' + str(self.n_layers) + "layer"
-        if self.normalize:
+        model_name += '_' + str(self.args.layers) + "layer"
+        if self.args.normalize:
             model_name += "-norm"
-        if improved_loss:
+        if self.args.improved_loss:
             model_name += "-improved_loss"
-        elif smooth_l1:
+        elif self.args.smooth_l1:
             model_name += "-smooth_l1"
 
-        threshold = config.params['gt_label_iou_thresh']
-        if threshold < 1.0:
+        if self.args.threshold < 1.0:
             model_name += "-extra_anchors" 
 
         model_name += "-" 
-        dataset = config.params['dataset']
-        model_name += dataset
+        model_name += self.args.dataset
         model_name += '-{epoch:03d}.h5'
 
-        print("Batch size: ", self.batch_size)
+        print("Batch size: ", self.args.batch_size)
         print("Weights filename: ", model_name)
         if not os.path.isdir(save_dir):
             os.makedirs(save_dir)
         filepath = os.path.join(save_dir, model_name)
 
         # prepare callbacks for model saving
+        # and learning rate scheduler
+        # learning rate is divided by half every 20epochs
+        # after 60th epoch
         checkpoint = ModelCheckpoint(filepath=filepath,
                                      verbose=1,
                                      save_weights_only=True)
@@ -312,13 +342,18 @@ class SSD:
         self.ssd.fit_generator(generator=self.train_generator,
                                use_multiprocessing=True,
                                callbacks=callbacks,
-                               epochs=self.epochs,
-                               workers=self.workers)
+                               epochs=self.args.epochs,
+                               workers=self.args.workers)
 
 
-    def load_weights(self, weights):
-        print("Loading weights: ", weights)
-        self.ssd.load_weights(weights)
+    def restore_weights(self):
+        """Load previously trained model weights
+        """
+        if self.args.restore_weights:
+            save_dir = os.path.join(os.getcwd(), self.args.save_dir)
+            filename = os.path.join(save_dir, self.args.restore_weights)
+            print("Loading weights: ", filename)
+            self.ssd.load_weights(filename)
 
 
     # evaluate image based on image (np tensor) or filename
@@ -420,6 +455,7 @@ class SSD:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    # arguments for model building and training
     help_ = "Number of feature extraction layers after backbone"
     parser.add_argument("--layers",
                         default=4,
@@ -430,10 +466,20 @@ if __name__ == '__main__':
                         default=4,
                         type=int,
                         help=help_)
+    help_ = "Number of epochs to train"
+    parser.add_argument("--epochs",
+                        default=200,
+                        type=int,
+                        help=help_)
     help_ = "Number of data generator worker threads"
     parser.add_argument("--workers",
                         default=4,
                         type=int,
+                        help=help_)
+    help_ = "Labels IoU threshold"
+    parser.add_argument("--threshold",
+                        default=0.6,
+                        type=float,
                         help=help_)
     help_ = "Backbone or base network"
     parser.add_argument("--backbone",
@@ -463,6 +509,14 @@ if __name__ == '__main__':
                         default=False,
                         action='store_true', 
                         help=help_)
+    help_ = "Directory for saving filenames"
+    parser.add_argument("--save-dir",
+                        default="weights",
+                        help=help_)
+    help_ = "Dataset name"
+    parser.add_argument("--dataset",
+                        default="drinks",
+                        help=help_)
 
     # arguments for inputs
     help_ = "Input image height"
@@ -479,6 +533,20 @@ if __name__ == '__main__':
     parser.add_argument("--channels",
                         default=3,
                         type=int,
+                        help=help_)
+
+    # arguments for dataset
+    help_ = "Path to dataset"
+    parser.add_argument("--data-path",
+                        default="dataset/drinks",
+                        help=help_)
+    help_ = "Train labels csv file name"
+    parser.add_argument("--train-labels",
+                        default="labels_train.csv",
+                        help=help_)
+    help_ = "Test labels csv file name"
+    parser.add_argument("--test-labels",
+                        default="labels_test.csv",
                         help=help_)
 
     # argumnets for evaluation of a trained model
@@ -510,5 +578,4 @@ if __name__ == '__main__':
                 ssd.evaluate(image_file=args.image_file)
             
     if args.train:
-        ssd.train_model(improved_loss=args.improved_loss,
-                        smooth_l1=args.smooth_l1)
+        ssd.train()

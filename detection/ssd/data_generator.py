@@ -130,11 +130,12 @@ class DataGenerator(Sequence):
             labels = self.dictionary[key]
             labels = np.array(labels)
             # 4 boxes coords are 1st four items of labels
+            # last item is the obj class
             boxes = labels[:,0:-1]
-            for index, shape in enumerate(self.feature_shapes):
-                shape = (1, *shape)
+            for index, feature_shape in enumerate(self.feature_shapes):
+                # feature_shape = feature_shape
                 # generate anchor boxes
-                anchors = anchor_boxes(shape,
+                anchors = anchor_boxes(feature_shape,
                                        image.shape,
                                        index=index,
                                        n_layers=self.n_layers)

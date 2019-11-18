@@ -52,12 +52,12 @@ def load_csv(path):
 
     return np.array(data)
 
-# associate key (filename) to value (box coords, class)
 def get_label_dictionary(labels, keys):
+    """Associate key (filename) to value (box coords, class)
+    """
     dictionary = {}
-    # boxes = []
     for key in keys:
-        dictionary[key] = [] # boxes
+        dictionary[key] = [] # empty boxes
 
     for label in labels:
         if len(label) != 6:
@@ -74,12 +74,17 @@ def get_label_dictionary(labels, keys):
         if label[-1]==0:
             print("No object labelled as bg:", label[0])
             continue
+
+        # box coords are float32
         value = value.astype(np.float32)
+        # filename is key
         key = label[0]
+        # boxes = bounding box coords and class label
         boxes = dictionary[key]
         boxes.append(value)
         dictionary[key] = boxes
 
+    # remove dataset entries w/o labels
     for key in keys:
         if len(dictionary[key]) == 0:
             del dictionary[key]
@@ -87,14 +92,17 @@ def get_label_dictionary(labels, keys):
     return dictionary
 
 
-# build a dict with key=filename, value=[box coords, class]
 def build_label_dictionary(csv_path):
+    """Build a dict with key=filename, value=[box coords, class]
+    """
     labels = load_csv(csv_path)
     # skip the 1st line header
     labels = labels[1:]
+    # keys are filenames
     keys = np.unique(labels[:,0])
     dictionary = get_label_dictionary(labels, keys)
     classes = np.unique(labels[:,-1]).astype(int).tolist()
+    # insert background label 0
     classes.insert(0, 0)
     print("Num of unique classes: ", classes)
     return dictionary, classes

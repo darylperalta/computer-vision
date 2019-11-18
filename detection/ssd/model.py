@@ -66,6 +66,8 @@ def build_ssd(input_shape,
 
     # number of anchors per feature pt
     n_anchors = len(aspect_ratios) + len(sizes) - 1
+    print("No. of Anchors:", n_anchors)
+    print("Sizes:", sizes)
 
     inputs = Input(shape=input_shape)
     # no. of base_outputs depends on n_layers
