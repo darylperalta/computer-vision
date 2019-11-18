@@ -23,18 +23,28 @@ from layer_utils import anchor_boxes, minmax2centroid, centroid2minmax
 from label_utils import index2class, get_box_color
 
 
-def nms(classes, offsets, anchors):
+def nms(args, classes, offsets, anchors):
+    """Perform NMS. Implements Algorithm 11.12.1
 
-    class_thresh = config.params['class_thresh']
-    iou_thresh = config.params['iou_thresh']
-    is_soft = config.params['is_soft_nms']
+    Arguments:
+        args : User-defined configurations
+        classes (tensor): Predicted classes
+        offsets (tensor): Predicted offsets
+        
+    Returns:
+        objects (list): class predictions per anchor
+        indexes (list): indexes of detected objects
+            filtered by NMS
+        scores (array): array of detected objects scores
+            filtered by NMS
+    """
 
     # get all non-zero (non-background) objects
     objects = np.argmax(classes, axis=1)
     # non-zero indexes are not background
     nonbg = np.nonzero(objects)[0]
-    #print("Candidate non bg: ", nonbg.size)
 
+    # D and S indexes in Line 1
     indexes = []
     while True:
         # list of zero probability values
@@ -43,18 +53,20 @@ def nms(classes, offsets, anchors):
         scores[nonbg] = np.amax(classes[nonbg], axis=1)
 
         # max probability given the list
+        # Lines 3 and 4
         score_idx = np.argmax(scores, axis=0)
         score_max = scores[score_idx]
-        # print(score_max)
         
         # get all non max probability & set it as new nonbg
+        # Line 5
         nonbg = nonbg[nonbg != score_idx]
 
         # if obj probability is less than threshold
-        if score_max < class_thresh:
+        if score_max < self.args.class_threshold:
             # we are done
             break
 
+        # Line 5
         indexes.append(score_idx)
         score_anc = anchors[score_idx]
         score_off = offsets[score_idx][0:4]
@@ -62,22 +74,25 @@ def nms(classes, offsets, anchors):
         score_box = np.expand_dims(score_box, axis=0)
         nonbg_copy = np.copy(nonbg)
 
-        # get all overlapping predictions
+        # get all overlapping predictions (Line 6)
         for idx in nonbg_copy:
             anchor = anchors[idx]
             offset = offsets[idx][0:4]
             box = anchor + offset
             box = np.expand_dims(box, axis=0)
             iou = layer_utils.iou(box, score_box)[0][0]
-            if is_soft:
+            # if soft NMS is chosen (Line 7)
+            if self.args.soft_nms:
+                # adjust score: Line 8
                 iou = -2 * iou * iou
                 classes[idx] *= math.exp(iou)
-                #print("Soft NMS scaling ...", idx)
-            elif iou >= iou_thresh:
-                #print(score_idx, "overlaps ", idx, "with iou ", iou)
+            # else NMS (Line 9)
+            elif iou >= self.args.iou_thresh:
+                # remove overlapping predictions with iou>threshold
+                # Line 10
                 nonbg = nonbg[nonbg != idx]
-                #print("NMS Removing ...", idx)
 
+        # Line 2
         if nonbg.size == 0:
             break
 
@@ -89,19 +104,29 @@ def nms(classes, offsets, anchors):
 
 
 # image must be normalized (0.0, 1.0)
-def show_boxes(image,
+def show_boxes(args,
+               image,
                classes,
                offsets,
                feature_shapes,
                show=True,
                normalize=False):
+    """Show detected objects. Show bounding boxes
+    and class names
 
+    Arguments:
+        image (tensor): Image to show detected objects
+        classes (tensor): Predicted classes
+        offsets (tensor): Predicted offsets
+        feature_shapes (tensor): SSD head feature maps
+        show (bool): Whether to show bounding boxes or not
+        normalize (bool): Whether the offsets are normalized
+    """
     # generate all anchors per feature map
     anchors = []
     n_layers = len(feature_shapes)
-    for index, shape in enumerate(feature_shapes):
-        shape = (1, *shape)
-        anchor = anchor_boxes(shape,
+    for index, feture_shape in enumerate(feature_shapes):
+        anchor = anchor_boxes(feature_shape,
                               image.shape,
                               index=index)
         anchor = np.reshape(anchor, [-1, 4])
@@ -127,7 +152,8 @@ def show_boxes(image,
         # convert fr cx,cy,w,h to real offsets
         offsets[:, 0:4] = offsets[:, 0:4] - anchors
 
-    objects, indexes, scores = nms(classes,
+    objects, indexes, scores = nms(args,
+                                   classes,
                                    offsets,
                                    anchors)
 

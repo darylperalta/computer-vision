@@ -135,7 +135,7 @@ def anchor_boxes(feature_shape,
     return boxes
 
 def centroid2minmax(boxes):
-    """Centroid format to minmax format 
+    """Centroid to minmax format 
     (cx, cy, w, h) to (xmin, xmax, ymin, ymax)
     """
     minmax= np.copy(boxes).astype(np.float)
@@ -145,9 +145,10 @@ def centroid2minmax(boxes):
     minmax[..., 3] = boxes[..., 1] + (0.5 * boxes[..., 3])
     return minmax
 
-# minmax to centroid format
-# (xmin, xmax, ymin, ymax) to (cx, cy, w, h)
 def minmax2centroid(boxes):
+    """Minmax to centroid format
+    (xmin, xmax, ymin, ymax) to (cx, cy, w, h)
+    """
     centroid = np.copy(boxes).astype(np.float)
     centroid[..., 0] = 0.5 * (boxes[..., 1] - boxes[..., 0])
     centroid[..., 0] += boxes[..., 0] 
@@ -157,8 +158,13 @@ def minmax2centroid(boxes):
     centroid[..., 3] = boxes[..., 3] - boxes[..., 2]
     return centroid
 
-# compute intersection of boxes1 and boxes2
 def intersection(boxes1, boxes2):
+    """Compute intersection of batch boxes1 and boxes2
+    
+    Arguments:
+        boxes1 (tensor): Boxes coordinates in pixels
+        boxes2 (tensor): Boxes coordinates in pixels
+    """
     m = boxes1.shape[0] # The number of boxes in `boxes1`
     n = boxes2.shape[0] # The number of boxes in `boxes2`
 
@@ -185,8 +191,13 @@ def intersection(boxes1, boxes2):
     return intersection_areas
 
 
-# compute union of boxes1 and boxes2
 def union(boxes1, boxes2, intersection_areas):
+    """Compute union of batch boxes1 and boxes2
+
+    Arguments:
+        boxes1 (tensor): Boxes coordinates in pixels
+        boxes2 (tensor): Boxes coordinates in pixels
+    """
     m = boxes1.shape[0] # number of boxes in boxes1
     n = boxes2.shape[0] # number of boxes in boxes2
 
@@ -208,24 +219,40 @@ def union(boxes1, boxes2, intersection_areas):
     return union_areas
 
 
-# compute iou of boxes1 and boxes2
 def iou(boxes1, boxes2):
+    """Compute IoU of batch boxes1 and boxes2
+
+    Arguments:
+        boxes1 (tensor): Boxes coordinates in pixels
+        boxes2 (tensor): Boxes coordinates in pixels
+    """
     intersection_areas = intersection(boxes1, boxes2)
     union_areas = union(boxes1, boxes2, intersection_areas)
     return intersection_areas / union_areas
 
-# retrieve ground truth class, bbox offset, and mask
+
 def get_gt_data(iou,
-                n_classes=6,
+                n_classes=4,
                 anchors=None,
                 labels=None,
-                normalize=False):
+                normalize=False,
+                threshold=0.6):
+    """Retrieve ground truth class, bbox offset, and mask
+    
+    Arguments:
+        iou (tensor): IoU of each bounding box wrt each anchor box
+        n_classes (int): Number of object classes
+        anchors (tensor): Anchor boxes per feature layer
+        labels (list): Ground truth labels
+        normalize (bool): If normalization should be applied
+        threshold (float): If less than 1.0, anchor boxes>threshold
+            are also part of positive anchor boxes
+    """
     # each maxiou_per_get is index of anchor w/ max iou
     # for the given ground truth bounding box
     maxiou_per_gt = np.argmax(iou, axis=0)
     
     # get the extra anchor boxes based on IoU
-    threshold = config.params['gt_label_iou_thresh']
     if threshold < 1.0:
         iou_gt_thresh = np.argwhere(iou>threshold)
         if iou_gt_thresh.size > 0:
@@ -240,11 +267,12 @@ def get_gt_data(iou,
 
     # mask generation
     gt_mask = np.zeros((iou.shape[0], 4))
+    # only indexes maxiou_per_gt are valid bounding boxes
     gt_mask[maxiou_per_gt] = 1.0
 
     # class generation
     gt_class = np.zeros((iou.shape[0], n_classes))
-    # by default all are background
+    # by default all are background (index 0)
     gt_class[:, 0] = 1
     # but those that belong to maxiou_per_gt are not
     gt_class[maxiou_per_gt, 0] = 0
@@ -255,22 +283,27 @@ def get_gt_data(iou,
     # the label of object in maxio_per_gt
     gt_class[row_col[:,0], row_col[:,1]]  = 1.0
     
-    # offset generation
+    # offsets generation
     gt_offset = np.zeros((iou.shape[0], 4))
-    anchors = np.reshape(anchors, [-1, 4])
+
+    # no need done in data gen
+    #anchors = np.reshape(anchors, [-1, 4])
 
     #(cx, cy, w, h) format
     if normalize:
         anchors = minmax2centroid(anchors)
         labels = minmax2centroid(labels)
-        # ((cx_gt - cx_anchor) / w_anchor) / 0.1
-        # ((cy_gt - cy_anchor) / h_anchor) / 0.1
+        # bbox = bounding box
+        # ((bbox x center - anchor box x center) / anchor box width) / 0.1
+        # ((bbox y center - anchor box y center) / anchor box height) / 0.1
+        # Equation 11.4.8 Chapter 11
         offsets1 = labels[:, 0:2] - anchors[maxiou_per_gt, 0:2]
         offsets1 /= anchors[maxiou_per_gt, 2:4]
         offsets1 /= 0.1
 
-        # log(w_gt / w_anchor) / 0.2
-        # log(h_gt / h_anchor) / 0.2
+        # log(bbox width / anchor box width) / 0.2
+        # log(bbox height / anchor box height) / 0.2
+        # Equation 11.4.8 Chapter 11
         offsets2 = np.log(labels[:, 2:4] / anchors[maxiou_per_gt, 2:4])
         offsets2 /= 0.2  
 

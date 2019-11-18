@@ -7,6 +7,7 @@ as dataset of SSD model.
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from __future__ import unicode_literals
 
 from tensorflow.python.keras.utils.data_utils import Sequence
 
@@ -14,7 +15,6 @@ import numpy as np
 import keras
 import layer_utils
 import label_utils
-import config
 import os
 import skimage
 
@@ -27,6 +27,18 @@ from skimage import exposure
 
 
 class DataGenerator(Sequence):
+    """Multi-threaded data generator.
+    Each thread reads a batch of image and labels
+
+    Arguments:
+        args : User-defined configuration
+        dictionary : dictionary of filenames and labels
+        n_classes (int): number of object classes
+        feature_shapes (tensor): feature maps of ssd head
+        n_anchors (int): number of anchor boxes per feature map pt
+        shuffle (Bool): If dataset should be shuffled bef sampling
+
+    """
     def __init__(self,
                  args,
                  dictionary,
@@ -131,7 +143,7 @@ class DataGenerator(Sequence):
             # key is the image filename 
             image_path = os.path.join(self.args.data_path, key)
             image = skimage.img_as_float(imread(image_path))
-
+            # assign image to a batch index
             x[i] = image
             # a label entry is made of 4-dim bounding box coords
             # and 1-dim class label
@@ -146,6 +158,7 @@ class DataGenerator(Sequence):
                                        image.shape,
                                        index=index,
                                        n_layers=self.args.layers)
+                # each feature layer has a row of anchor boxes
                 anchors = np.reshape(anchors, [-1, 4])
                 # compute IoU of each anchor box 
                 # with respect to each bounding boxes
@@ -156,7 +169,8 @@ class DataGenerator(Sequence):
                                  n_classes=self.n_classes,
                                  anchors=anchors,
                                  labels=labels,
-                                 normalize=self.args.normalize)
+                                 normalize=self.args.normalize,
+                                 threshold=self.args.threshold)
                 gt_cls, gt_off, gt_msk = gt
                 if index == 0:
                     cls = np.array(gt_cls)

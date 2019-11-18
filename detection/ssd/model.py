@@ -58,6 +58,20 @@ def build_ssd(input_shape,
               n_layers=4,
               n_classes=4,
               aspect_ratios=(1, 2, 0.5)):
+    """Build SSD model given a backbone
+
+    Arguments:
+        input_shape (list): input image shape
+        backbone (model): Keras backbone model
+        n_layers (int): Number of layers of ssd head
+        n_classes (int): Number of obj classes
+        aspect_ratios (list): annchor box aspect ratios
+
+    Returns:
+        n_anchors (int): Number of anchor boxes per feature pt
+        feature_shape (tensor): SSD head feature maps
+        model (Keras model): SSD model
+    """
     # n classes = (background, object1, 
     # object2, ..., object(n-1))
 
@@ -65,9 +79,8 @@ def build_ssd(input_shape,
     sizes = layer_utils.anchor_sizes()[0]
 
     # number of anchors per feature pt
+    # default is 4
     n_anchors = len(aspect_ratios) + len(sizes) - 1
-    print("No. of Anchors:", n_anchors)
-    print("Sizes:", sizes)
 
     inputs = Input(shape=input_shape)
     # no. of base_outputs depends on n_layers

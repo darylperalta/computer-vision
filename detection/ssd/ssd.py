@@ -374,7 +374,7 @@ class SSD:
                                               offsets,
                                               self.feature_shapes,
                                               show=show,
-                                              normalize=self.normalize)
+                                              normalize=self.args.normalize)
         return class_names, rects
 
 
@@ -558,6 +558,21 @@ if __name__ == '__main__':
     help_ = "Image file for evaluation"
     parser.add_argument("--image_file",
                         default=None,
+                        help=help_)
+    help_ = "Class probability threshold"
+    parser.add_argument("--class-threshold",
+                        default=0.8,
+                        type=float,
+                        help=help_)
+    help_ = "NMS IoU threshold"
+    parser.add_argument("--iou-threshold",
+                        default=0.2,
+                        type=float,
+                        help=help_)
+    help_ = "Use soft NMS or not"
+    parser.add_argument("--soft-nms",
+                        default=False,
+                        action='store_true', 
                         help=help_)
 
     args = parser.parse_args()
