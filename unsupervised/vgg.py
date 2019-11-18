@@ -34,7 +34,7 @@ class VGG():
         self.build_model()
 
     def build_model(self):
-        inputs = Input(shape=self.input_shape)
+        inputs = Input(shape=self.input_shape, name='x')
         x = make_layers(self.cfg, inputs)
         self._model = Model(inputs, x, name='VGG')
 

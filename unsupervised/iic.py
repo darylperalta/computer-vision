@@ -39,12 +39,12 @@ class IIC():
 
     # build the n_heads of the IIC model
     def build_model(self):
-        inputs = Input(shape=self.train_gen.input_shape)
+        inputs = Input(shape=self.train_gen.input_shape, name='x')
         x = self.backbone(inputs)
         x = Flatten()(x)
         outputs = []
         for i in range(self.args.heads):
-            name = "head%d" % i
+            name = "z_head%d" % i
             outputs.append(Dense(self.n_labels,
                                  activation='softmax',
                                  name=name)(x))
@@ -82,6 +82,7 @@ class IIC():
         # each head contribute 1/n_heads to the total loss
         return neg_mi/self.args.heads
 
+
     # train the model
     def train(self):
         accuracy = AccuracyCallback(self)
@@ -93,6 +94,7 @@ class IIC():
                                   callbacks=callbacks,
                                   workers=4,
                                   shuffle=True)
+
 
     # pre-load test data for evaluation
     def load_eval_dataset(self):

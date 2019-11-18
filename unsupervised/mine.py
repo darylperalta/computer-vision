@@ -219,12 +219,13 @@ class MINE():
 
 
     def build_model(self):
-        inputs = Input(shape=self.train_gen.input_shape, name="input")
+        inputs = Input(shape=self.train_gen.input_shape,
+                       name="x")
         x = self.backbone(inputs)
         x = Flatten()(x)
         y = Dense(self.latent_dim,
                   activation='linear',
-                  name="class")(x)
+                  name="encoded_x")(x)
         self._encoder = Model(inputs, y, name="encoder")
         self._mine = SimpleMINE(self.args,
                                 input_dim=self.latent_dim,
