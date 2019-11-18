@@ -58,7 +58,7 @@ class SimpleMAML(nn.Module):
 
 
     def sample_input(self, mean, batch_size, n_samples):
-        # sample input data fr gaussian dist
+        # sample input data fr 1d gaussian dist
         samples = np.random.normal(mean, size=(batch_size, n_samples))
         samples = np.reshape(samples, (batch_size, n_samples))
         samples = torch.from_numpy(samples)
@@ -90,7 +90,6 @@ class SimpleMAML(nn.Module):
         if test:
             data = [self.held_out[test_index]]
             indexes = [0]
-            #n_epochs = self.args.n_epochs
             n_epochs = 1
             batch_size = self.args.batch_size
         else:
@@ -108,7 +107,7 @@ class SimpleMAML(nn.Module):
             if not test:
                 # during meta-training, sample fr distribution of tasks
                 indexes = np.random.randint(0, self.args.n_tasks, n_task_samples)
-            # meta-learning
+            # adaptation inner loop (fast learning)
             for index in indexes:
                 # train per sampled task
                 for p, x in zip(self.params, theta):
@@ -135,7 +134,7 @@ class SimpleMAML(nn.Module):
                 if not test:
                     print(mean[0], y[0])
 
-            # adaptation
+            # meta-learning outer loop (slow learning)
             for phi, index in zip(phis, indexes):
                 for p, x in zip(self.params, phi):
                     p.data.copy_(x)

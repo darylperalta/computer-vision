@@ -87,7 +87,7 @@ def nms(args, classes, offsets, anchors):
                 iou = -2 * iou * iou
                 classes[idx] *= math.exp(iou)
             # else NMS (Line 9)
-            elif iou >= args.iou_thresh:
+            elif iou >= args.iou_threshold:
                 # remove overlapping predictions with iou>threshold
                 # Line 10
                 nonbg = nonbg[nonbg != idx]
