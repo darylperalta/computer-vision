@@ -3,7 +3,7 @@
 1)  ResNet50 (v2) backbone.
     Train with 6 layers of feature maps.
     Pls adjust batch size depending on your GPU memory.
-    For 1060, -b=1. For V100 32GB, -b=4
+    For 1060 with 6GB, -b=1. For V100 with 32GB, -b=4
 
 python3 ssd.py -t -b=4
 
@@ -27,7 +27,9 @@ python3 ssd.py -t -b=4 --tiny
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from __future__ import unicode_literals
 
+import tensorflow as tf
 from tensorflow.keras.models import load_model
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras.optimizers import Adam
@@ -35,9 +37,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import ModelCheckpoint
 from tensorflow.keras.callbacks import LearningRateScheduler
 from tensorflow.keras.losses import Huber
-# from tensorflow.keras.utils import plot_model
 
-import tensorflow as tf
 import layer_utils
 import label_utils
 import config
@@ -51,25 +51,11 @@ from skimage.io import imread
 from data_generator import DataGenerator
 from label_utils import build_label_dictionary
 from boxes import show_boxes
-from model import build_tinynet, build_ssd
+from model import build_ssd
 from resnet import build_resnet
 
-def lr_scheduler_resnet(epoch):
-    lr = 1e-3
-    epoch_offset = config.params['epoch_offset']
-    if epoch > (180 - epoch_offset):
-        lr *= 0.5e-3
-    elif epoch > (140 - epoch_offset):
-        lr *= 1e-3
-    elif epoch > (100 - epoch_offset):
-        lr *= 1e-2
-    elif epoch > (60 - epoch_offset):
-        lr *= 1e-1
-    print('Learning rate: ', lr)
-    return lr
-
-
 def lr_scheduler(epoch):
+    """Learning rate scheduler - called every epoch"""
     lr = 1e-3
     epoch_offset = config.params['epoch_offset']
     if epoch > (200 - epoch_offset):
@@ -91,50 +77,68 @@ def lr_scheduler(epoch):
     print('Learning rate: ', lr)
     return lr
 
-class SSD():
-    def __init__(self,
-                 n_layers=6,
-                 batch_size=4,
-                 epochs=200,
-                 workers=8,
-                 build_basenet=build_resnet,
-                 normalize=False):
-        self.n_layers = n_layers
-        self.batch_size = batch_size
-        self.epochs = epochs
-        self.workers = workers
+
+
+class SSD:
+    """
+
+    Argumennts:
+    args: User-defined configurations
+
+    """
+    def __init__(self, args):
+        self.args = args
+        #self.n_layers = n_layers
+        #self.batch_size = batch_size
+        #self.epochs = epochs
+        #self.workers = workers
+        #self.normalize = normalize
+
         self.train_generator = None
         self.test_generator = None
-        self.normalize = normalize
-        self.build_model(build_basenet)
+        self.build_model()
 
 
-    def build_model(self, build_basenet):
+    def build_model(self):
+        """Build backbone and SSD networks
+        """
+
+        # read the list of image files and labels
         self.build_dictionary()
-        # load 1st image and build base network
-        image_path = os.path.join(config.params['data_path'],
-                                  self.keys[0])
-        image = skimage.img_as_float(imread(image_path))
-        self.input_shape = image.shape
-        self.basenetwork = build_basenet(self.input_shape,
-                                         n_layers=self.n_layers)
-        self.basenetwork.summary()
-        #plot_model(self.basenetwork,
-        #           to_file="basenetwork.png",
-        #           show_shapes=True)
 
-        ret = build_ssd(self.input_shape,
-                        self.basenetwork,
-                        n_layers=self.n_layers,
-                        n_classes=self.n_classes)
+        # input shape is (480, 640, 3) by default
+        self.input_shape = (self.args.height, 
+                            self.args.width,
+                            self.args.channels)
+
+        # build the backbone network (eg ResNet50)
+        # the number of output layers is equal to n_layers
+        self.backbone = self.args.backbone(self.input_shape,
+                                           n_layers=self.args.layers)
+
+        # using the backbone, build ssd network
+        # outputs of ssd are class and bounding box predictions
+        anchors, features, ssd = build_ssd(self.input_shape,
+                                           self.backbone,
+                                           n_layers=self.args.layers,
+                                           n_classes=self.n_classes)
         # n_anchors = num of anchors per feature point (eg 4)
-        # feature_shapes is the feature map shape
-        # feature maps of ssd - basis of class and offset predictions
-        self.n_anchors, self.feature_shapes, self.ssd = ret
-        self.ssd.summary()
-        #plot_model(self.ssd,
-        #           to_file="ssd.png",
-        #           show_shapes=True)
+        self.n_anchors = anchors
+        # feature_shapes is a list of feature map shapes
+        # per output layer
+        self.feature_shapes = features
+        # ssd model
+        self.ssd = ssd
+
+
+    def print_summary(self):
+        from tensorflow.keras.utils import plot_model
+        if self.args.summary:
+            self.backbone.summary()
+            self.ssd.summary()
+            plot_model(self.backbone,
+                       to_file="backbone.png",
+                       show_shapes=True)
 
 
     def build_generator(self):
@@ -274,7 +278,7 @@ class SSD():
 
         # prepare model model saving directory.
         save_dir = os.path.join(os.getcwd(), 'saved_models')
-        model_name = self.basenetwork.name
+        model_name = self.backbone.name
         model_name += '_' + str(self.n_layers) + "layer"
         if self.normalize:
             model_name += "-norm"
@@ -416,32 +420,33 @@ class SSD():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    help_ = "Use tinynet as base network"
-    parser.add_argument("--tiny",
-                        default=False,
-                        action='store_true',
-                        help=help_)
-    help_ = "Num of ssd top feature map layers"
-    parser.add_argument("-l",
-                        "--layers",
-                        default=6,
-                        type=int,
-                        help=help_)
-    help_ = "Batch size"
-    parser.add_argument("-b",
-                        "--batch_size",
+    help_ = "Number of feature extraction layers after backbone"
+    parser.add_argument("--layers",
                         default=4,
                         type=int,
                         help=help_)
-    help_ = "Number of workers thread"
-    parser.add_argument("--workers",
-                        default=8,
+    help_ = "Batch size during training"
+    parser.add_argument("--batch_size",
+                        default=4,
                         type=int,
                         help=help_)
-    help_ = "Train model"
-    parser.add_argument("-t",
-                        "--train",
+    help_ = "Number of data generator worker threads"
+    parser.add_argument("--workers",
+                        default=4,
+                        type=int,
+                        help=help_)
+    help_ = "Backbone or base network"
+    parser.add_argument("--backbone",
+                        default=build_resnet,
+                        help=help_)
+    help_ = "Train the model"
+    parser.add_argument("--train",
                         action='store_true',
+                        help=help_)
+    help_ = "Print model summary (text and png)"
+    parser.add_argument("--summary",
+                        default=False,
+                        action='store_true', 
                         help=help_)
     help_ = "Use focal and smooth l1 loss functions"
     parser.add_argument("--improved_loss",
@@ -449,27 +454,39 @@ if __name__ == '__main__':
                         action='store_true', 
                         help=help_)
     help_ = "Use smooth l1 loss function"
-    parser.add_argument("-s",
-                        "--smooth_l1",
+    parser.add_argument("--smooth_l1",
                         default=False,
                         action='store_true', 
                         help=help_)
-
     help_ = "Use normalize predictions"
-    parser.add_argument("-n",
-                        "--normalize",
+    parser.add_argument("--normalize",
                         default=False,
                         action='store_true', 
                         help=help_)
 
-    help_ = "Load h5 model trained weights"
-    parser.add_argument("-w",
-                        "--weights",
+    # arguments for inputs
+    help_ = "Input image height"
+    parser.add_argument("--height",
+                        default=480,
+                        type=int,
+                        help=help_)
+    help_ = "Input image width"
+    parser.add_argument("--width",
+                        default=640,
+                        type=int,
+                        help=help_)
+    help_ = "Input image channels"
+    parser.add_argument("--channels",
+                        default=3,
+                        type=int,
                         help=help_)
 
+    # argumnets for evaluation of a trained model
+    help_ = "Load h5 model trained weights"
+    parser.add_argument("--restore-weights",
+                        help=help_)
     help_ = "Evaluate model"
-    parser.add_argument("-e",
-                        "--evaluate",
+    parser.add_argument("--evaluate",
                         default=False,
                         action='store_true', 
                         help=help_)
@@ -478,24 +495,14 @@ if __name__ == '__main__':
                         default=None,
                         help=help_)
 
-
     args = parser.parse_args()
+    ssd = SSD(args)
 
-    # build ssd using simple cnn backbone
-    if args.tiny:
-        build_basenet = build_tinynet
-    # build ssd using resnet50 backbone
-    else:
-        build_basenet = build_resnet
+    if args.summary:
+        ssd.print_summary()
 
-    ssd = SSD(n_layers=args.layers,
-              batch_size=args.batch_size,
-              workers=args.workers,
-              build_basenet=build_basenet,
-              normalize=args.normalize)
-
-    if args.weights:
-        ssd.load_weights(args.weights)
+    if args.restore_weights:
+        ssd.load_weights(args.restore_weights)
         if args.evaluate:
             if args.image_file is None:
                 ssd.evaluate_test()

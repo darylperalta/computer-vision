@@ -53,69 +53,23 @@ def conv_layer(inputs,
     return x
 
 
-def build_tinynet(input_shape,
-                  n_layers=1,
-                  name='tinynet'):
-    # basic base network
-    # the backbone is just a 3-layer convnet
-    inputs = Input(shape=input_shape)
-    conv1 = conv_layer(inputs,
-                       32,
-                       kernel_size=5,
-                       strides=2,
-                       use_maxpool=False,
-                       postfix="1")
-
-    conv2 = conv_layer(conv1,
-                       64,
-                       kernel_size=3,
-                       strides=2,
-                       use_maxpool=False,
-                       postfix="2")
-
-    conv3 = conv_layer(conv2,
-                       64,
-                       kernel_size=3,
-                       strides=2,
-                       use_maxpool=False,
-                       postfix="3")
-
-    outputs = []
-    prev_conv = conv3
-    n_filters = 64
-
-    for i in range(n_layers):
-        postfix = "_layer" + str(i+1)
-        conv = conv_layer(prev_conv,
-                          n_filters,
-                          kernel_size=3,
-                          strides=2,
-                          use_maxpool=False,
-                          postfix=postfix)
-        outputs.append(conv)
-        prev_conv = conv
-        n_filters *= 2
-    
-    basenetwork = Model(inputs, outputs, name=name)
-
-    return basenetwork
-
-
 def build_ssd(input_shape,
-              basenetwork,
-              n_layers=1,
-              n_classes=4):
+              backbone,
+              n_layers=4,
+              n_classes=4,
+              aspect_ratios=(1, 2, 0.5)):
     # n classes = (background, object1, 
     # object2, ..., object(n-1))
+
+    # this is equally spaced anchor sizes fr 0.2-0.9
     sizes = layer_utils.anchor_sizes()[0]
-    aspect_ratios = layer_utils.anchor_aspect_ratios()
 
     # number of anchors per feature pt
     n_anchors = len(aspect_ratios) + len(sizes) - 1
 
     inputs = Input(shape=input_shape)
     # no. of base_outputs depends on n_layers
-    base_outputs = basenetwork(inputs)
+    base_outputs = backbone(inputs)
     
     outputs = []
     feature_shapes = []
@@ -123,7 +77,7 @@ def build_ssd(input_shape,
     out_off = []
 
     for i in range(n_layers):
-        # each conv layer from basenetwork is used
+        # each conv layer from backbone is used
         # as feature maps for class and offset predictions
         # also known as multi-scale predictions
         conv = base_outputs if n_layers==1 else base_outputs[i]

@@ -173,7 +173,7 @@ def resnet_v1(input_shape, depth, num_classes=10):
     return model
 
 
-def resnet_v2(input_shape, depth, n_layers=6):
+def resnet_v2(input_shape, depth, n_layers=4):
     """ResNet Version 2 Model builder [b]
 
     Stacks of (1 x 1)-(3 x 3)-(1 x 1) BN-ReLU-Conv2D or also known as
@@ -289,11 +289,19 @@ def build_resnet(input_shape,
                  n_layers=4,
                  version=2,
                  n=6):
-    # model version
-    # orig paper: version = 1 (ResNet v1),
-    # improved ResNet: version = 2 (ResNet v2)
-    print("n_layers:", n_layers)
+    """Build a resnet as backbone of SSD
 
+    # Arguments:
+        input_shape (list): Input image size and channels
+        n_layers (int): Number of feature layers for SSD
+        version (int): Supports ResNetv1 and v2 but v2 by default
+        n (int): Determines number of ResNet layers
+                 (Default is ResNet50)
+
+    # Returns
+        model (Keras Model)
+
+    """
     # computed depth from supplied model parameter n
     if version == 1:
         depth = n * 6 + 2
