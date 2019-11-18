@@ -556,7 +556,7 @@ if __name__ == '__main__':
                         action='store_true', 
                         help=help_)
     help_ = "Image file for evaluation"
-    parser.add_argument("--image_file",
+    parser.add_argument("--image-file",
                         default=None,
                         help=help_)
     help_ = "Class probability threshold"
@@ -582,7 +582,7 @@ if __name__ == '__main__':
         ssd.print_summary()
 
     if args.restore_weights:
-        ssd.load_weights(args.restore_weights)
+        ssd.restore_weights(args.restore_weights)
         if args.evaluate:
             if args.image_file is None:
                 ssd.evaluate_test()
