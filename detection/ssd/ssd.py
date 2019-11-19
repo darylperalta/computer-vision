@@ -1,4 +1,4 @@
-"""SSD class to build, train, eval SSD models
+"""SSD class to build, train, eval an SSD network
 
 1)  ResNet50 (v2) backbone.
     Train with 6 layers of feature maps.
@@ -10,17 +10,13 @@ python3 ssd.py -t -b=4
 2)  ResNet50 (v2) backbone.
     Train from a previously saved model:
 
-python3 ssd.py --weights=saved_models/ResNet56v2_4-layer_weights-200.h5 -t -b=4
+python3 ssd.py --restore-weights=saved_models/ResNet56v2_4-layer_weights-200.h5 -t -b=4
 
 2)  ResNet50 (v2) backbone.
     Evaluate:
 
-python3 ssd.py -e --weights=saved_models/ResNet56v2_4-layer_weights-200.h5 \
-        --image_file=dataset/drinks/0010000.jpg
-
-3) TinyNet backbone
-
-python3 ssd.py -t -b=4 --tiny
+python3 ssd.py -e --restore-weights=saved_models/ResNet56v2_4-layer_weights-200.h5 \
+        --image-file=dataset/drinks/0010000.jpg
 
 """
 
@@ -31,7 +27,6 @@ from __future__ import unicode_literals
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model
-from tensorflow.keras.utils import plot_model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import ModelCheckpoint
@@ -53,6 +48,8 @@ from label_utils import build_label_dictionary
 from boxes import show_boxes
 from model import build_ssd
 from resnet import build_resnet
+from loss import focal_loss_categorical, smooth_l1_loss, l1_loss
+
 
 def lr_scheduler(epoch):
     """Learning rate scheduler - called every epoch"""
@@ -78,18 +75,18 @@ def lr_scheduler(epoch):
     return lr
 
 
-
 class SSD:
-    """SSD holds a ssd network model and a dataset generator.
-    SSD also defines obj detection loss functions and performs
-    training and validation.
+    """Made of an ssd network model and a dataset generator.
+    SSD defines functions to train and validate 
+    an ssd network model.
 
-    # Argumennts:
+    Arguments:
         args: User-defined configurations
 
-    # Properties:
+    Attributes:
         ssd (model): SSD network model
-        train_generator: multi-threaded data generator
+        train_generator: multi-threaded data generator for training
+        test_generator: multi-threaded data generator for testing
 
     """
     def __init__(self, args):
@@ -97,6 +94,7 @@ class SSD:
         Build backbone and ssd network models
         """
         self.args = args
+        seld.ssd = None
         self.train_generator = None
         self.test_generator = None
         self.build_model()
@@ -106,7 +104,7 @@ class SSD:
         """Build backbone and SSD networks
         """
 
-        # read the list of image files and labels
+        # store in a dictionary the list of image files and labels
         self.build_dictionary()
 
         # input shape is (480, 640, 3) by default
@@ -130,18 +128,17 @@ class SSD:
         # n_anchors = num of anchors per feature point (eg 4)
         self.n_anchors = anchors
         # feature_shapes is a list of feature map shapes
-        # per output layer
+        # per output layer - used for computing anchor boxes sizes
         self.feature_shapes = features
-        print(self.feature_shapes)
-        # SSD network model
+        # ssd network model
         self.ssd = ssd
 
 
     def build_dictionary(self):
-        """Reads the input image filenames and obj detection labels
-        from a csv file
+        """Read the input image filenames and obj detection labels
+        from a csv file and store in a dictionary
         """
-        # load dataset path
+        # train dataset path
         csv_path = os.path.join(self.args.data_path,
                                 self.args.train_labels)
 
@@ -188,97 +185,6 @@ class SSD:
                                             shuffle=True)
 
 
-    def focal_loss_ce(self, y_true, y_pred):
-        """Alternative CE focal loss (not used)
-        """
-        # only missing in this FL is y_pred clipping
-        weight = (1 - y_pred)
-        weight *= weight
-        # alpha = 0.25
-        weight *= 0.25
-        return K.categorical_crossentropy(weight*y_true, y_pred)
-
-
-    def focal_loss_binary(self, y_true, y_pred):
-        """Binary cross-entropy focal loss
-        """
-        gamma = 2.0
-        alpha = 0.25
-
-        pt_1 = tf.where(tf.equal(y_true, 1),
-                        y_pred,
-                        tf.ones_like(y_pred))
-        pt_0 = tf.where(tf.equal(y_true, 0),
-                        y_pred,
-                        tf.zeros_like(y_pred))
-
-        epsilon = K.epsilon()
-        # clip to prevent NaN's and Inf's
-        pt_1 = K.clip(pt_1, epsilon, 1. - epsilon)
-        pt_0 = K.clip(pt_0, epsilon, 1. - epsilon)
-
-        weight = alpha * K.pow(1. - pt_1, gamma)
-        fl1 = -K.sum(weight * K.log(pt_1))
-        weight = (1 - alpha) * K.pow(pt_0, gamma)
-        fl0 = -K.sum(weight * K.log(1. - pt_0))
-
-        return fl1 + fl0
-
-
-    def focal_loss_categorical(self, y_true, y_pred):
-        """Categorical cross-entropy focal loss
-        """
-        gamma = 2.0
-        alpha = 0.25
-
-        # scale to ensure sum of prob is 1.0
-        y_pred /= K.sum(y_pred, axis=-1, keepdims=True)
-
-        # clip the prediction value to prevent NaN's and Inf's
-        epsilon = K.epsilon()
-        y_pred = K.clip(y_pred, epsilon, 1. - epsilon)
-
-        # calculate cross entropy
-        cross_entropy = -y_true * K.log(y_pred)
-
-        # calculate focal loss
-        weight = alpha * K.pow(1 - y_pred, gamma)
-        cross_entropy *= weight
-
-        return K.sum(cross_entropy, axis=-1)
-
-    def mask_offset(self, y_true, y_pred): 
-        """Pre-process ground truth and prediction data
-        """
-        # 1st 4 are offsets
-        offset = y_true[..., 0:4]
-        # last 4 are mask
-        mask = y_true[..., 4:8]
-        # pred is actually duplicated for alignment
-        # either we get the 1st or last 4 offset pred
-        # and apply the mask
-        pred = y_pred[..., 0:4]
-        offset *= mask
-        pred *= mask
-        return offset, pred
-
-
-    def l1_loss(self, y_true, y_pred):
-        """MAE or L1 loss
-        """
-        offset, pred = self.mask_offset(y_true, y_pred)
-        # we can use L1
-        return K.mean(K.abs(pred - offset), axis=-1)
-
-
-    def smooth_l1_loss(self, y_true, y_pred):
-        """Smooth L1 loss using tensorflow Huber loss
-        """
-        offset, pred = self.mask_offset(y_true, y_pred)
-        # Huber loss as approx of smooth L1
-        return Huber()(offset, pred)
-
-
     def train(self):
         """Train the SSD network
         """
@@ -291,13 +197,13 @@ class SSD:
         # choice of loss functions via args
         if self.args.improved_loss:
             print("Focal loss and smooth L1")
-            loss = [self.focal_loss_categorical, self.smooth_l1_loss]
+            loss = [focal_loss_categorical, smooth_l1_loss]
         elif self.args.smooth_l1:
             print("Smooth L1")
-            loss = ['categorical_crossentropy', self.smooth_l1_loss]
+            loss = ['categorical_crossentropy', smooth_l1_loss]
         else:
             print("Cross-entropy and L1")
-            loss = ['categorical_crossentropy', self.l1_loss]
+            loss = ['categorical_crossentropy', l1_loss]
 
         self.ssd.compile(optimizer=optimizer, loss=loss)
 
@@ -353,8 +259,9 @@ class SSD:
             self.ssd.load_weights(filename)
 
 
-    # evaluate image based on image (np tensor) or filename
     def evaluate(self, image_file=None, image=None):
+        """Evaluate image based on image (np tensor) or filename
+        """
         show = False
         if image is None:
             image = skimage.img_as_float(imread(image_file))
@@ -362,27 +269,22 @@ class SSD:
 
         image = np.expand_dims(image, axis=0)
         classes, offsets = self.ssd.predict(image)
-        # print("Classes shape: ", classes.shape)
-        # print("Offsets shape: ", offsets.shape)
         image = np.squeeze(image, axis=0)
-        # classes = np.argmax(classes[0], axis=1)
         classes = np.squeeze(classes)
-        # classes = np.argmax(classes, axis=1)
         offsets = np.squeeze(offsets)
         class_names, rects, _, _ = show_boxes(args,
                                               image,
                                               classes,
                                               offsets,
                                               self.feature_shapes,
-                                              show=show,
-                                              normalize=self.args.normalize)
+                                              show=show)
         return class_names, rects
 
 
     def evaluate_test(self):
         # test labels csv path
-        csv_path = os.path.join(config.params['data_path'],
-                                config.params['test_labels'])
+        csv_path = os.path.join(self.args.data_path,
+                                self.args.test_labels)
         # test dictionary
         dictionary, _ = build_label_dictionary(csv_path)
         keys = np.array(list(dictionary.keys()))
@@ -402,7 +304,7 @@ class SSD:
             # last one is class
             gt_class_ids = labels[:, -1]
             # load image id by key
-            image_file = os.path.join(config.params['data_path'], key)
+            image_file = os.path.join(self.args.data_path, key)
             image = skimage.img_as_float(imread(image_file))
             image = np.expand_dims(image, axis=0)
             # perform prediction
@@ -411,12 +313,12 @@ class SSD:
             classes = np.squeeze(classes)
             offsets = np.squeeze(offsets)
             # perform nms
-            _, _, class_ids, boxes = show_boxes(image,
+            _, _, class_ids, boxes = show_boxes(args,
+                                                image,
                                                 classes,
                                                 offsets,
                                                 self.feature_shapes,
-                                                show=False,
-                                                normalize=self.normalize)
+                                                show=False)
 
             boxes = np.reshape(np.array(boxes), (-1,4))
             # compute IoUs
@@ -452,9 +354,10 @@ class SSD:
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description='SSD for object detection')
+
     # arguments for model building and training
-    help_ = "Number of feature extraction layers after backbone"
+    help_ = "Number of feature extraction layers of SSD head after backbone"
     parser.add_argument("--layers",
                         default=4,
                         type=int,
@@ -492,17 +395,17 @@ if __name__ == '__main__':
                         default=False,
                         action='store_true', 
                         help=help_)
-    help_ = "Use focal and smooth l1 loss functions"
-    parser.add_argument("--improved_loss",
+    help_ = "Use focal and smooth L1 loss functions"
+    parser.add_argument("--improved-loss",
                         default=False,
                         action='store_true', 
                         help=help_)
-    help_ = "Use smooth l1 loss function"
-    parser.add_argument("--smooth_l1",
+    help_ = "Use smooth L1 loss function"
+    parser.add_argument("--smooth-l1",
                         default=False,
                         action='store_true', 
                         help=help_)
-    help_ = "Use normalize predictions"
+    help_ = "Use normalized predictions"
     parser.add_argument("--normalize",
                         default=False,
                         action='store_true', 
@@ -516,7 +419,7 @@ if __name__ == '__main__':
                         default="drinks",
                         help=help_)
 
-    # arguments for inputs
+    # inputs configurations
     help_ = "Input image height"
     parser.add_argument("--height",
                         default=480,
@@ -533,8 +436,8 @@ if __name__ == '__main__':
                         type=int,
                         help=help_)
 
-    # arguments for dataset
-    help_ = "Path to dataset"
+    # dataset configurations
+    help_ = "Path to dataset directory"
     parser.add_argument("--data-path",
                         default="dataset/drinks",
                         help=help_)
@@ -547,7 +450,7 @@ if __name__ == '__main__':
                         default="labels_test.csv",
                         help=help_)
 
-    # argumnets for evaluation of a trained model
+    # configurations for evaluation of a trained model
     help_ = "Load h5 model trained weights"
     parser.add_argument("--restore-weights",
                         help=help_)
@@ -560,7 +463,7 @@ if __name__ == '__main__':
     parser.add_argument("--image-file",
                         default=None,
                         help=help_)
-    help_ = "Class probability threshold"
+    help_ = "Class probability threshold (>= is an object)"
     parser.add_argument("--class-threshold",
                         default=0.8,
                         type=float,

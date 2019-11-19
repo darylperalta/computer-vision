@@ -13,7 +13,6 @@ import argparse
 import os
 import layer_utils
 import label_utils
-import config
 import math
 
 from skimage.io import imread
@@ -103,26 +102,23 @@ def nms(args, classes, offsets, anchors):
     return objects, indexes, scores
 
 
-# image must be normalized (0.0, 1.0)
 def show_boxes(args,
                image,
                classes,
                offsets,
                feature_shapes,
-               show=True,
-               normalize=False):
+               show=True)
     """Show detected objects. Show bounding boxes
     and class names
 
     Arguments:
-        image (tensor): Image to show detected objects
+        image (tensor): Image to show detected objects (0.0 to 1.0)
         classes (tensor): Predicted classes
         offsets (tensor): Predicted offsets
         feature_shapes (tensor): SSD head feature maps
         show (bool): Whether to show bounding boxes or not
-        normalize (bool): Whether the offsets are normalized
     """
-    # generate all anchors per feature map
+    # generate all anchor boxes per feature map
     anchors = []
     n_layers = len(feature_shapes)
     for index, feature_shape in enumerate(feature_shapes):
@@ -139,7 +135,7 @@ def show_boxes(args,
     # objects = np.argmax(classes, axis=1)
     # print(np.unique(objects, return_counts=True))
     # nonbg = np.nonzero(objects)[0]
-    if normalize:
+    if args.normalize:
         print("Normalize")
         anchors_centroid = minmax2centroid(anchors)
         offsets[:, 0:2] *= 0.1
