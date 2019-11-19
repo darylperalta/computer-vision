@@ -1,6 +1,6 @@
-"""
+"""Video demo utils for showing live object detection from a camera
 
-python3 video_demo.py --weights=saved_models/<weights.h5>
+python3 video_demo.py --restore-weights=weights/<weights.h5>
 
 """
 
@@ -163,24 +163,16 @@ class  VideoDemo():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     help_ = "Load h5 model trained weights"
-    parser.add_argument("-w",
-                        "--weights",
-                        help=help_)
-    help_ = "Use tinynet as base network"
-    parser.add_argument("--tiny",
-                        default=False,
-                        action='store_true',
+    parser.add_argument("--restore-weights",
                         help=help_)
     help_ = "Normalize predictions"
-    parser.add_argument("-n",
-                        "--normalize",
+    parser.add_argument("--normalize",
                         default=False,
                         action='store_true', 
                         help=help_)
     help_ = "Number of layers"
-    parser.add_argument("-l",
-                        "--layers",
-                        default=6,
+    parser.add_argument("--layers",
+                        default=4,
                         type=int,
                         help=help_)
     help_ = "Camera index"
@@ -189,29 +181,21 @@ if __name__ == '__main__':
                         type=int,
                         help=help_)
     help_ = "Record video"
-    parser.add_argument("-r",
-                        "--record",
+    parser.add_argument("--record",
                         default=False,
                         action='store_true', 
                         help=help_)
     help_ = "Video filename"
-    parser.add_argument("-f",
-                        "--filename",
+    parser.add_argument("--filename",
                         default="demo.mp4",
                         help=help_)
 
     args = parser.parse_args()
 
-    if args.tiny:
-        ssd = SSD(n_layers=args.layers,
-                  normalize=args.normalize)
-    else:
-        ssd = SSD(n_layers=args.layers,
-                  build_basenet=build_resnet,
-                  normalize=args.normalize)
+    ssd = SSD(args)
 
-    if args.weights:
-        ssd.load_weights(args.weights)
+    if args.restore_weights:
+        ssd.load_weights(args.restore_weights)
         videodemo = VideoDemo(detector=ssd,
                               camera=args.camera,
                               record=args.record,

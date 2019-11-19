@@ -13,6 +13,7 @@ https://arxiv.org/pdf/1603.05027.pdf
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from __future__ import unicode_literals
 
 from tensorflow.keras.layers import Dense, Conv2D
 from tensorflow.keras.layers import BatchNormalization, Activation
@@ -47,18 +48,18 @@ def resnet_layer(inputs,
                  conv_first=True):
     """2D Convolution-Batch Normalization-Activation stack builder
 
-    # Arguments
-        inputs (tensor): input tensor from input image or previous layer
+    Arguments:
+        inputs (tensor): Input tensor from input image or previous layer
         num_filters (int): Conv2D number of filters
         kernel_size (int): Conv2D square kernel dimensions
         strides (int): Conv2D square stride dimensions
-        activation (string): activation name
-        batch_normalization (bool): whether to include batch normalization
+        activation (string): Activation name
+        batch_normalization (bool): Whether to include batch normalization
         conv_first (bool): conv-bn-activation (True) or
             bn-activation-conv (False)
 
-    # Returns
-        x (tensor): tensor as input to the next layer
+    Returns:
+        x (tensor): Tensor as input to the next layer
     """
     conv = Conv2D(num_filters,
                   kernel_size=kernel_size,
@@ -104,9 +105,9 @@ def resnet_v1(input_shape, depth, num_classes=10):
     ResNet110 1.7M
 
     # Arguments
-        input_shape (tensor): shape of input image tensor
-        depth (int): number of core convolutional layers
-        num_classes (int): number of classes (CIFAR10 has 10)
+        input_shape (tensor): Shape of input image tensor
+        depth (int): Number of core convolutional layers
+        num_classes (int): Number of classes (CIFAR10 has 10)
 
     # Returns
         model (Model): Keras model instance
@@ -191,9 +192,9 @@ def resnet_v2(input_shape, depth, n_layers=4):
     stage 2:  8x8,  256
 
     # Arguments
-        input_shape (tensor): shape of input image tensor
-        depth (int): number of core convolutional layers
-        num_classes (int): number of classes (CIFAR10 has 10)
+        input_shape (tensor): Shape of input image tensor
+        depth (int): Number of core convolutional layers
+        num_classes (int): Number of classes (CIFAR10 has 10)
 
     # Returns
         model (Model): Keras model instance

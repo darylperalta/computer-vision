@@ -54,10 +54,10 @@ def anchor_boxes(feature_shape,
         boxes (tensor): Anchor boxes per feature map
     """
     
-    # anchor box sizes
+    # anchor box sizes given an index of layer in ssd head
     sizes = anchor_sizes(n_layers)[index]
-    # -1 bec only 1 of the 2 sizes is used
-    n_boxes = len(aspect_ratios) + len(sizes) - 1
+    # number of anchor boxes per feature map pt
+    n_boxes = len(aspect_ratios) + 1
     # ignore number of channels (last)
     image_height, image_width, _ = image_shape
     # ignore number of feature maps (last)

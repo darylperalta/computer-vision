@@ -1,11 +1,11 @@
 """SSD model builder
-TinyNet model builder as SSD backbone
-
+Utilities for building network layers are also provided
 """
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from __future__ import unicode_literals
 
 from tensorflow.keras.layers import Activation, Dense, Input
 from tensorflow.keras.layers import Conv2D, Flatten
@@ -27,11 +27,11 @@ def conv2d(inputs,
                   kernel_size=kernel_size,
                   strides=strides,
                   kernel_initializer='he_normal',
-                  # kernel_regularizer=l2(l2_reg),
                   name=name,
                   padding='same')
 
     return conv(inputs)
+
 
 def conv_layer(inputs,
                filters=32,
@@ -72,15 +72,8 @@ def build_ssd(input_shape,
         feature_shape (tensor): SSD head feature maps
         model (Keras model): SSD model
     """
-    # n classes = (background, object1, 
-    # object2, ..., object(n-1))
-
-    # this is equally spaced anchor sizes fr 0.2-0.9
-    sizes = layer_utils.anchor_sizes()[0]
-
-    # number of anchors per feature pt
-    # default is 4
-    n_anchors = len(aspect_ratios) + len(sizes) - 1
+    # number of anchor boxes per feature map pt
+    n_anchors = len(aspect_ratios) + 1
 
     inputs = Input(shape=input_shape)
     # no. of base_outputs depends on n_layers
@@ -125,6 +118,9 @@ def build_ssd(input_shape,
         name = "off_res" + str(i+1)
         offsets = Reshape((-1, 4),
                           name=name)(offsets)
+        # concat for alignment with ground truth size
+        # made of ground truth offsets and mask of same dim
+        # needed during loss computation
         offsets = [offsets, offsets]
         name = "off_cat" + str(i+1)
         offsets = Concatenate(axis=-1,
