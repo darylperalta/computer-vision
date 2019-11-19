@@ -90,7 +90,7 @@ def mask_offset(y_true, y_pred):
 def l1_loss(y_true, y_pred):
     """MAE or L1 loss
     """
-    offset, pred = self.mask_offset(y_true, y_pred)
+    offset, pred = mask_offset(y_true, y_pred)
     # we can use L1
     return K.mean(K.abs(pred - offset), axis=-1)
 
@@ -98,6 +98,6 @@ def l1_loss(y_true, y_pred):
 def smooth_l1_loss(y_true, y_pred):
     """Smooth L1 loss using tensorflow Huber loss
     """
-    offset, pred = self.mask_offset(y_true, y_pred)
+    offset, pred = mask_offset(y_true, y_pred)
     # Huber loss as approx of smooth L1
     return Huber()(offset, pred)
