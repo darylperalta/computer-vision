@@ -76,6 +76,9 @@ class SSD:
 
     def build_model(self):
         """Build backbone and SSD models."""
+        # store in a dictionary the list of image files and labels
+        self.build_dictionary()
+        
         # input shape is (480, 640, 3) by default
         self.input_shape = (self.args.height, 
                             self.args.width,
@@ -121,8 +124,6 @@ class SSD:
 
     def build_generator(self):
         """Build a multi-thread train data generator."""
-        # store in a dictionary the list of image files and labels
-        self.build_dictionary()
 
         self.train_generator = DataGenerator(args=self.args,
                                              dictionary=self.dictionary,
