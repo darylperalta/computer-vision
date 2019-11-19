@@ -44,27 +44,27 @@ def anchor_boxes(feature_shape,
     anchor boxes are in minmax format
 
     Arguments:
-        feature_shape (list): feature map shape
-        image_shape (list): image size shape
-        index (int): indicates which of ssd head n_layers
+        feature_shape (list): Feature map shape
+        image_shape (list): Image size shape
+        index (int): Indicates which of ssd head layers
             are we referring to
         n_layers (int): Number of ssd head layers
 
     Returns:
-        list of anchor boxes 
-
+        boxes (tensor): Anchor boxes per feature map
     """
     
     # anchor box sizes
     sizes = anchor_sizes(n_layers)[index]
     # -1 bec only 1 of the 2 sizes is used
     n_boxes = len(aspect_ratios) + len(sizes) - 1
+    # ignore number of channels (last)
     image_height, image_width, _ = image_shape
     # ignore number of feature maps (last)
     feature_height, feature_width, _ = feature_shape
 
     # normalized width and height
-    # I think 0 should be index since this is normalized wrt layer num
+    # sizes[0] is scale size, sizes[1] is sqrt(scale*(scale+1))
     norm_height = image_height * sizes[0]
     norm_width = image_width * sizes[0]
 
@@ -73,15 +73,14 @@ def anchor_boxes(feature_shape,
     # anchor box by aspect ratio on resized image dims
     # Equation 11.2.3 in Chapter 11
     for ar in aspect_ratios:
-        box_height = norm_height / np.sqrt(ar)
         box_width = norm_width * np.sqrt(ar)
+        box_height = norm_height / np.sqrt(ar)
         width_height.append((box_width, box_height))
-    # anchor box by size[1] for aspect_ratio = 1
+    # multiple anchor box by size[1] for aspect_ratio = 1
     # Equation 11.2.4 in Chapter 11
-    for size in sizes[1:]:
-        box_height = image_height * size
-        box_width = image_width * size
-        width_height.append((box_width, box_height))
+    box_width = image_width * sizes[1]
+    box_height = image_height * sizes[1]
+    width_height.append((box_width, box_height))
 
     # now an array of (width, height)
     width_height = np.array(width_height)
@@ -110,33 +109,35 @@ def anchor_boxes(feature_shape,
     cy_grid = np.expand_dims(cy_grid, -1)
 
     # tensor = (feature_map_height, feature_map_width, n_boxes, 4)
+    # aligned with image tensor (height, width, channels)
     # last dimension = (cx, cy, w, h)
     boxes = np.zeros((feature_height, feature_width, n_boxes, 4))
     
-    # orig which may be wrong
-    #boxes[..., 0] = np.tile(cy_grid, (1, 1, n_boxes))
-    #boxes[..., 1] = np.tile(cx_grid, (1, 1, n_boxes))
-
-    #should this be the correct
+    # (cx, cy)
     boxes[..., 0] = np.tile(cx_grid, (1, 1, n_boxes))
     boxes[..., 1] = np.tile(cy_grid, (1, 1, n_boxes))
 
+    # (w, h)
     boxes[..., 2] = width_height[:, 0]
     boxes[..., 3] = width_height[:, 1]
+
     # convert (cx, cy, w, h) to (xmin, xmax, ymin, ymax)
     # prepend one dimension to boxes 
-    # to account for the batch size and tile it along
-    # the result will be a 5D tensor of shape 
-    # (batch_size, feature_map_height, feature_map_width, n_boxes, 4)
+    # to account for the batch size = 1
     boxes = centroid2minmax(boxes)
     boxes = np.expand_dims(boxes, axis=0)
-    #boxes = np.tile(boxes, (feature_shape[0], 1, 1, 1, 1))
-    #boxes = np.tile(boxes, (feature_shape[0], 1, 1, 1, 1))
     return boxes
+
 
 def centroid2minmax(boxes):
     """Centroid to minmax format 
     (cx, cy, w, h) to (xmin, xmax, ymin, ymax)
+
+    Arguments:
+        boxes (tensor): Batch of boxes in centroid format
+
+    Returns:
+        minmax (tensor): Batch of boxes in minmax format
     """
     minmax= np.copy(boxes).astype(np.float)
     minmax[..., 0] = boxes[..., 0] - (0.5 * boxes[..., 2])
@@ -145,9 +146,16 @@ def centroid2minmax(boxes):
     minmax[..., 3] = boxes[..., 1] + (0.5 * boxes[..., 3])
     return minmax
 
+
 def minmax2centroid(boxes):
     """Minmax to centroid format
     (xmin, xmax, ymin, ymax) to (cx, cy, w, h)
+
+    Arguments:
+        boxes (tensor): Batch of boxes in minmax format
+
+    Returns:
+        centroid (tensor): Batch of boxes in centroid format
     """
     centroid = np.copy(boxes).astype(np.float)
     centroid[..., 0] = 0.5 * (boxes[..., 1] - boxes[..., 0])
@@ -158,12 +166,18 @@ def minmax2centroid(boxes):
     centroid[..., 3] = boxes[..., 3] - boxes[..., 2]
     return centroid
 
+
+
 def intersection(boxes1, boxes2):
-    """Compute intersection of batch boxes1 and boxes2
+    """Compute intersection of batch of boxes1 and boxes2
     
     Arguments:
         boxes1 (tensor): Boxes coordinates in pixels
         boxes2 (tensor): Boxes coordinates in pixels
+
+    Returns:
+        intersection_areas (tensor): intersection of areas of
+            boxes1 and boxes2
     """
     m = boxes1.shape[0] # The number of boxes in `boxes1`
     n = boxes2.shape[0] # The number of boxes in `boxes2`
@@ -192,11 +206,15 @@ def intersection(boxes1, boxes2):
 
 
 def union(boxes1, boxes2, intersection_areas):
-    """Compute union of batch boxes1 and boxes2
+    """Compute union of batch of boxes1 and boxes2
 
     Arguments:
         boxes1 (tensor): Boxes coordinates in pixels
         boxes2 (tensor): Boxes coordinates in pixels
+
+    Returns:
+        union_areas (tensor): union of areas of
+            boxes1 and boxes2
     """
     m = boxes1.shape[0] # number of boxes in boxes1
     n = boxes2.shape[0] # number of boxes in boxes2
@@ -225,6 +243,10 @@ def iou(boxes1, boxes2):
     Arguments:
         boxes1 (tensor): Boxes coordinates in pixels
         boxes2 (tensor): Boxes coordinates in pixels
+
+    Returns:
+        iou (tensor): intersectiin of union of areas of
+            boxes1 and boxes2
     """
     intersection_areas = intersection(boxes1, boxes2)
     union_areas = union(boxes1, boxes2, intersection_areas)
@@ -247,12 +269,16 @@ def get_gt_data(iou,
         normalize (bool): If normalization should be applied
         threshold (float): If less than 1.0, anchor boxes>threshold
             are also part of positive anchor boxes
+
+    Returns:
+        gt_class, gt_offset, gt_mask (tensor): Ground truth classes,
+            offsets, and masks
     """
     # each maxiou_per_get is index of anchor w/ max iou
     # for the given ground truth bounding box
     maxiou_per_gt = np.argmax(iou, axis=0)
     
-    # get the extra anchor boxes based on IoU
+    # get extra anchor boxes based on IoU
     if threshold < 1.0:
         iou_gt_thresh = np.argwhere(iou>threshold)
         if iou_gt_thresh.size > 0:
@@ -276,7 +302,7 @@ def get_gt_data(iou,
     gt_class[:, 0] = 1
     # but those that belong to maxiou_per_gt are not
     gt_class[maxiou_per_gt, 0] = 0
-    # we have to find those column indeces (classes)
+    # we have to find those column indexes (classes)
     maxiou_col = np.reshape(maxiou_per_gt, (maxiou_per_gt.shape[0], 1))
     label_col = np.reshape(labels[:,4], (labels.shape[0], 1)).astype(int)
     row_col = np.append(maxiou_col, label_col, axis=1)
@@ -285,9 +311,6 @@ def get_gt_data(iou,
     
     # offsets generation
     gt_offset = np.zeros((iou.shape[0], 4))
-
-    # no need done in data gen
-    #anchors = np.reshape(anchors, [-1, 4])
 
     #(cx, cy, w, h) format
     if normalize:

@@ -1,6 +1,5 @@
 """Loss functions for object detection
 
-
 """
 
 from __future__ import absolute_import

@@ -5,11 +5,11 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from __future__ import unicode_literals
 
 import numpy as np
 import skimage
 import matplotlib.pyplot as plt
-import argparse
 import os
 import layer_utils
 import label_utils
@@ -23,7 +23,7 @@ from label_utils import index2class, get_box_color
 
 
 def nms(args, classes, offsets, anchors):
-    """Perform NMS. Implements Algorithm 11.12.1
+    """Perform NMS (Algorithm 11.12.1).
 
     Arguments:
         args : User-defined configurations
@@ -31,10 +31,10 @@ def nms(args, classes, offsets, anchors):
         offsets (tensor): Predicted offsets
         
     Returns:
-        objects (list): class predictions per anchor
-        indexes (list): indexes of detected objects
+        objects (tensor): class predictions per anchor
+        indexes (tensor): indexes of detected objects
             filtered by NMS
-        scores (array): array of detected objects scores
+        scores (tensor): array of detected objects scores
             filtered by NMS
     """
 
@@ -60,7 +60,7 @@ def nms(args, classes, offsets, anchors):
         # Line 5
         nonbg = nonbg[nonbg != score_idx]
 
-        # if obj probability is less than threshold
+        # if max obj probability is less than threshold (def 0.8)
         if score_max < args.class_threshold:
             # we are done
             break
@@ -74,6 +74,7 @@ def nms(args, classes, offsets, anchors):
         nonbg_copy = np.copy(nonbg)
 
         # get all overlapping predictions (Line 6)
+        # perform Non-Max Suppression (NMS)
         for idx in nonbg_copy:
             anchor = anchors[idx]
             offset = offsets[idx][0:4]
@@ -85,17 +86,18 @@ def nms(args, classes, offsets, anchors):
                 # adjust score: Line 8
                 iou = -2 * iou * iou
                 classes[idx] *= math.exp(iou)
-            # else NMS (Line 9)
+            # else NMS (Line 9), (iou threshold def 0.2)
             elif iou >= args.iou_threshold:
                 # remove overlapping predictions with iou>threshold
                 # Line 10
                 nonbg = nonbg[nonbg != idx]
 
-        # Line 2
+        # Line 2, nothing else to process
         if nonbg.size == 0:
             break
 
 
+    # get the array of object scores
     scores = np.zeros((classes.shape[0],))
     scores[indexes] = np.amax(classes[indexes], axis=1)
 
@@ -108,8 +110,8 @@ def show_boxes(args,
                offsets,
                feature_shapes,
                show=True):
-    """Show detected objects. Show bounding boxes
-    and class names
+    """Show detected objects on an image. Show bounding boxes
+    and class names.
 
     Arguments:
         image (tensor): Image to show detected objects (0.0 to 1.0)
@@ -117,6 +119,12 @@ def show_boxes(args,
         offsets (tensor): Predicted offsets
         feature_shapes (tensor): SSD head feature maps
         show (bool): Whether to show bounding boxes or not
+
+    Returns:
+        class_names (list): List of object class names
+        rects (list): Bounding box rectangles of detected objects
+        class_ids (list): Class ids of detected objects
+        boxes (list): Anchor boxes of detected objects
     """
     # generate all anchor boxes per feature map
     anchors = []
@@ -213,6 +221,7 @@ def show_anchors(image,
                  maxiou_per_gt=None,
                  labels=None,
                  show_grids=False):
+    """Utility for showing anchor boxes for debugging purposes"""
     image_height, image_width, _ = image.shape
     _, feature_height, feature_width, _ = feature_shape
 

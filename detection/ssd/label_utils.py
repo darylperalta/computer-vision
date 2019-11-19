@@ -9,6 +9,7 @@ drawing label on an image
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from __future__ import unicode_literals
 
 import numpy as np
 import csv
@@ -18,32 +19,36 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from random import randint
 
-# retrieve plt-compatible color string based on object index
 def get_box_color(index=None):
+    """Retrieve plt-compatible color string based on object index"""
     colors = ['w', 'r', 'b', 'g', 'c', 'm', 'y', 'g', 'c', 'm', 'k']
     if index is None:
         return colors[randint(0, len(colors) - 1)]
     return colors[index % len(colors)]
 
-# retrieve rgb color based on object index
+
 def get_box_rgbcolor(index=None):
+    """Retrieve rgb color based on object index"""
     colors = [(0, 0, 0), (255, 0, 0), (0, 0, 255), (0, 255, 0), (128, 128, 0)]
     if index is None:
         return colors[randint(0, len(colors) - 1)]
     return colors[index % len(colors)]
 
-# convert index (int) to class name (string)
+
 def index2class(index=0):
+    """Convert index (int) to class name (string)"""
     classes = config.params['classes']
     return classes[index]
 
-# convert class name (string) to index (int)
+
 def class2index(class_="background"):
+    """Convert class name (string) to index (int)"""
     classes = config.params['classes']
     return classes.index(class_)
 
-# load a csv file into an np array
+
 def load_csv(path):
+    """Load a csv file into an np array"""
     data = []
     with open(path) as csv_file:
         rows = csv.reader(csv_file, delimiter=',')
@@ -53,8 +58,7 @@ def load_csv(path):
     return np.array(data)
 
 def get_label_dictionary(labels, keys):
-    """Associate key (filename) to value (box coords, class)
-    """
+    """Associate key (filename) to value (box coords, class)"""
     dictionary = {}
     for key in keys:
         dictionary[key] = [] # empty boxes
@@ -93,8 +97,7 @@ def get_label_dictionary(labels, keys):
 
 
 def build_label_dictionary(csv_path):
-    """Build a dict with key=filename, value=[box coords, class]
-    """
+    """Build a dict with key=filename, value=[box coords, class]"""
     labels = load_csv(csv_path)
     # skip the 1st line header
     labels = labels[1:]
@@ -108,8 +111,8 @@ def build_label_dictionary(csv_path):
     return dictionary, classes
 
 
-# draw bounding box on an object given box coords (labels[1:5])
 def show_labels(image, labels, ax=None):
+    """Draw bounding box on an object given box coords (labels[1:5])"""
     if ax is None:
         fig, ax = plt.subplots(1)
         ax.imshow(image)
