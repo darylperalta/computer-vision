@@ -107,7 +107,7 @@ def show_boxes(args,
                classes,
                offsets,
                feature_shapes,
-               show=True)
+               show=True):
     """Show detected objects. Show bounding boxes
     and class names
 

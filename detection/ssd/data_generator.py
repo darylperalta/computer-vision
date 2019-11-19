@@ -1,7 +1,6 @@
 """Data generator
-This is a scalable and efficient way of reading huge images
-as dataset of SSD model.
-
+This is a multi-threaded, scalable, and efficient way of reading huge images
+from a filesystem as dataset 
 """
 
 from __future__ import absolute_import
@@ -12,32 +11,30 @@ from __future__ import unicode_literals
 from tensorflow.python.keras.utils.data_utils import Sequence
 
 import numpy as np
-import keras
 import layer_utils
 import label_utils
 import os
 import skimage
 
 from layer_utils import get_gt_data
-from skimage.io import imread
 from layer_utils import anchor_boxes
 
+from skimage.io import imread
 from skimage.util import random_noise
 from skimage import exposure
 
 
 class DataGenerator(Sequence):
     """Multi-threaded data generator.
-    Each thread reads a batch of image and labels
+    Each thread reads a batch of images and their object labels
 
     Arguments:
         args : User-defined configuration
-        dictionary : dictionary of filenames and labels
-        n_classes (int): number of object classes
-        feature_shapes (tensor): feature maps of ssd head
-        n_anchors (int): number of anchor boxes per feature map pt
+        dictionary : Dictionary of image filenames and object labels
+        n_classes (int): Number of object classes
+        feature_shapes (tensor): Shapes of ssd head feature maps
+        n_anchors (int): Number of anchor boxes per feature map pt
         shuffle (Bool): If dataset should be shuffled bef sampling
-
     """
     def __init__(self,
                  args,
@@ -66,7 +63,7 @@ class DataGenerator(Sequence):
 
 
     def __getitem__(self, index):
-        """Indexes to images to sample fr filesystem"""
+        """Get a batch of data"""
         start_index = index * self.args.batch_size
         end_index = (index+1) * self.args.batch_size
         keys = self.keys[start_index : end_index]
@@ -81,8 +78,7 @@ class DataGenerator(Sequence):
 
 
     def get_n_boxes(self):
-        """Total number of bounding boxes
-        """
+        """Total number of bounding boxes"""
         self.n_boxes = 0
         for shape in self.feature_shapes:
             self.n_boxes += np.prod(shape) // self.n_anchors
@@ -118,14 +114,14 @@ class DataGenerator(Sequence):
 
     def __data_generation(self, keys):
         """Generate train data: images and 
-        object ground truth labels per image
+        object detection ground truth labels 
 
         Arguments:
-            keys (array): randomly sampled keys (key is image filename)
+            keys (array): Randomly sampled keys (key is image filename)
 
-        Return:
-            x (tensor): batch images
-            y (tensor): batch classes, offsets, and masks
+        Returns:
+            x (tensor): Batch images
+            y (tensor): Batch classes, offsets, and masks
         """
         # train input data
         x = np.zeros((self.args.batch_size, *self.input_shape))

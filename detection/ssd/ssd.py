@@ -85,25 +85,20 @@ class SSD:
 
     Attributes:
         ssd (model): SSD network model
-        train_generator: multi-threaded data generator for training
-        test_generator: multi-threaded data generator for testing
-
+        train_generator: Multi-threaded data generator for training
     """
     def __init__(self, args):
-        """Copy user-defined configs
-        Build backbone and ssd network models
+        """Copy user-defined configs.
+        Build backbone and ssd network models.
         """
         self.args = args
-        seld.ssd = None
+        self.ssd = None
         self.train_generator = None
-        self.test_generator = None
         self.build_model()
 
 
     def build_model(self):
-        """Build backbone and SSD networks
-        """
-
+        """Build backbone and SSD models."""
         # store in a dictionary the list of image files and labels
         self.build_dictionary()
 
@@ -135,8 +130,8 @@ class SSD:
 
 
     def build_dictionary(self):
-        """Read the input image filenames and obj detection labels
-        from a csv file and store in a dictionary
+        """Read input image filenames and obj detection labels
+        from a csv file and store in a dictionary.
         """
         # train dataset path
         csv_path = os.path.join(self.args.data_path,
@@ -151,8 +146,7 @@ class SSD:
 
 
     def print_summary(self):
-        """Print network summary for debugging purposes
-        """
+        """Print network summary for debugging purposes."""
         from tensorflow.keras.utils import plot_model
         if self.args.summary:
             self.backbone.summary()
@@ -163,8 +157,7 @@ class SSD:
 
 
     def build_generator(self):
-        """Build a multi-thread train data generator
-        """
+        """Build a multi-thread train data generator."""
         self.train_generator = DataGenerator(args=self.args,
                                              dictionary=self.dictionary,
                                              n_classes=self.n_classes,
@@ -172,28 +165,14 @@ class SSD:
                                              n_anchors=self.n_anchors,
                                              shuffle=True)
 
-        return
-        # we skip the test data generator since it is time consuming
-        # multi-thread test data generator
-        self.test_generator = DataGenerator(dictionary=self.test_dictionary,
-                                            n_classes=self.n_classes,
-                                            input_shape=self.input_shape,
-                                            feature_shapes=self.feature_shapes,
-                                            n_anchors=self.n_anchors,
-                                            n_layers=self.n_layers,
-                                            batch_size=self.batch_size,
-                                            shuffle=True)
-
 
     def train(self):
-        """Train the SSD network
-        """
+        """Train an ssd network."""
         # build the train data generator
         if self.train_generator is None:
             self.build_generator()
 
         optimizer = Adam(lr=1e-3)
-        print("# classes", self.n_classes)
         # choice of loss functions via args
         if self.args.improved_loss:
             print("Focal loss and smooth L1")
@@ -211,7 +190,7 @@ class SSD:
         # prepare model model saving directory.
         save_dir = os.path.join(os.getcwd(), self.args.save_dir)
         model_name = self.backbone.name
-        model_name += '_' + str(self.args.layers) + "layer"
+        model_name += '-' + str(self.args.layers) + "layer"
         if self.args.normalize:
             model_name += "-norm"
         if self.args.improved_loss:
@@ -226,15 +205,16 @@ class SSD:
         model_name += self.args.dataset
         model_name += '-{epoch:03d}.h5'
 
+        print("# of classes", self.n_classes)
         print("Batch size: ", self.args.batch_size)
         print("Weights filename: ", model_name)
         if not os.path.isdir(save_dir):
             os.makedirs(save_dir)
         filepath = os.path.join(save_dir, model_name)
 
-        # prepare callbacks for model saving
+        # prepare callbacks for saving model weights
         # and learning rate scheduler
-        # learning rate is divided by half every 20epochs
+        # learning rate decreases by 50% every 20 epochs
         # after 60th epoch
         checkpoint = ModelCheckpoint(filepath=filepath,
                                      verbose=1,
@@ -242,6 +222,7 @@ class SSD:
         scheduler = LearningRateScheduler(lr_scheduler)
 
         callbacks = [checkpoint, scheduler]
+        # train the ssd network
         self.ssd.fit_generator(generator=self.train_generator,
                                use_multiprocessing=True,
                                callbacks=callbacks,
@@ -250,8 +231,7 @@ class SSD:
 
 
     def restore_weights(self):
-        """Load previously trained model weights
-        """
+        """Load previously trained model weights"""
         if self.args.restore_weights:
             save_dir = os.path.join(os.getcwd(), self.args.save_dir)
             filename = os.path.join(save_dir, self.args.restore_weights)
@@ -259,19 +239,23 @@ class SSD:
             self.ssd.load_weights(filename)
 
 
-    def evaluate(self, image_file=None, image=None):
-        """Evaluate image based on image (np tensor) or filename
-        """
-        show = False
-        if image is None:
-            image = skimage.img_as_float(imread(image_file))
-            show = True
-
+    def detect_objects(self, image):
         image = np.expand_dims(image, axis=0)
         classes, offsets = self.ssd.predict(image)
         image = np.squeeze(image, axis=0)
         classes = np.squeeze(classes)
         offsets = np.squeeze(offsets)
+        return image, classes, offsets
+
+
+    def evaluate(self, image_file=None, image=None):
+        """Evaluate image based on image (np tensor) or filename"""
+        show = False
+        if image is None:
+            image = skimage.img_as_float(imread(image_file))
+            show = True
+
+        image, classes, offsets = self.detect_objects(image)
         class_names, rects, _, _ = show_boxes(args,
                                               image,
                                               classes,
@@ -306,12 +290,7 @@ class SSD:
             # load image id by key
             image_file = os.path.join(self.args.data_path, key)
             image = skimage.img_as_float(imread(image_file))
-            image = np.expand_dims(image, axis=0)
-            # perform prediction
-            classes, offsets = self.ssd.predict(image)
-            image = np.squeeze(image, axis=0)
-            classes = np.squeeze(classes)
-            offsets = np.squeeze(offsets)
+            image, classes, offsets = self.detect_objects(image)
             # perform nms
             _, _, class_ids, boxes = show_boxes(args,
                                                 image,

@@ -38,56 +38,54 @@ def focal_loss_binary(y_true, y_pred):
                     y_pred,
                     tf.zeros_like(y_pred))
 
-   epsilon = K.epsilon()
-   # clip to prevent NaN and Inf
-   pt_1 = K.clip(pt_1, epsilon, 1. - epsilon)
-   pt_0 = K.clip(pt_0, epsilon, 1. - epsilon)
+    epsilon = K.epsilon()
+    # clip to prevent NaN and Inf
+    pt_1 = K.clip(pt_1, epsilon, 1. - epsilon)
+    pt_0 = K.clip(pt_0, epsilon, 1. - epsilon)
 
-   weight = alpha * K.pow(1. - pt_1, gamma)
-   fl1 = -K.sum(weight * K.log(pt_1))
-   weight = (1 - alpha) * K.pow(pt_0, gamma)
-   fl0 = -K.sum(weight * K.log(1. - pt_0))
+    weight = alpha * K.pow(1. - pt_1, gamma)
+    fl1 = -K.sum(weight * K.log(pt_1))
+    weight = (1 - alpha) * K.pow(pt_0, gamma)
+    fl0 = -K.sum(weight * K.log(1. - pt_0))
 
-   return fl1 + fl0
+    return fl1 + fl0
 
 
 def focal_loss_categorical(y_true, y_pred):
-   """Categorical cross-entropy focal loss
-   """
-   gamma = 2.0
-   alpha = 0.25
+    """Categorical cross-entropy focal loss"""
+    gamma = 2.0
+    alpha = 0.25
 
-   # scale to ensure sum of prob is 1.0
-   y_pred /= K.sum(y_pred, axis=-1, keepdims=True)
+    # scale to ensure sum of prob is 1.0
+    y_pred /= K.sum(y_pred, axis=-1, keepdims=True)
 
-   # clip the prediction value to prevent NaN and Inf
-   epsilon = K.epsilon()
-   y_pred = K.clip(y_pred, epsilon, 1. - epsilon)
+    # clip the prediction value to prevent NaN and Inf
+    epsilon = K.epsilon()
+    y_pred = K.clip(y_pred, epsilon, 1. - epsilon)
 
-   # calculate cross entropy
-   cross_entropy = -y_true * K.log(y_pred)
+    # calculate cross entropy
+    cross_entropy = -y_true * K.log(y_pred)
 
-   # calculate focal loss
-   weight = alpha * K.pow(1 - y_pred, gamma)
-   cross_entropy *= weight
+    # calculate focal loss
+    weight = alpha * K.pow(1 - y_pred, gamma)
+    cross_entropy *= weight
 
-   return K.sum(cross_entropy, axis=-1)
+    return K.sum(cross_entropy, axis=-1)
 
 
 def mask_offset(y_true, y_pred): 
-   """Pre-process ground truth and prediction data
-   """
-   # 1st 4 are offsets
-   offset = y_true[..., 0:4]
-   # last 4 are mask
-   mask = y_true[..., 4:8]
-   # pred is actually duplicated for alignment
-   # either we get the 1st or last 4 offset pred
-   # and apply the mask
-   pred = y_pred[..., 0:4]
-   offset *= mask
-   pred *= mask
-   return offset, pred
+    """Pre-process ground truth and prediction data"""
+    # 1st 4 are offsets
+    offset = y_true[..., 0:4]
+    # last 4 are mask
+    mask = y_true[..., 4:8]
+    # pred is actually duplicated for alignment
+    # either we get the 1st or last 4 offset pred
+    # and apply the mask
+    pred = y_pred[..., 0:4]
+    offset *= mask
+    pred *= mask
+    return offset, pred
 
 
 def l1_loss(y_true, y_pred):
