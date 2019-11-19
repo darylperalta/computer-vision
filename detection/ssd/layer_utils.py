@@ -303,8 +303,10 @@ def get_gt_data(iou,
     # but those that belong to maxiou_per_gt are not
     gt_class[maxiou_per_gt, 0] = 0
     # we have to find those column indexes (classes)
-    maxiou_col = np.reshape(maxiou_per_gt, (maxiou_per_gt.shape[0], 1))
-    label_col = np.reshape(labels[:,4], (labels.shape[0], 1)).astype(int)
+    maxiou_col = np.reshape(maxiou_per_gt,
+                            (maxiou_per_gt.shape[0], 1))
+    label_col = np.reshape(labels[:,4],
+                           (labels.shape[0], 1)).astype(int)
     row_col = np.append(maxiou_col, label_col, axis=1)
     # the label of object in maxio_per_gt
     gt_class[row_col[:,0], row_col[:,1]]  = 1.0
@@ -317,8 +319,8 @@ def get_gt_data(iou,
         anchors = minmax2centroid(anchors)
         labels = minmax2centroid(labels)
         # bbox = bounding box
-        # ((bbox x center - anchor box x center) / anchor box width) / 0.1
-        # ((bbox y center - anchor box y center) / anchor box height) / 0.1
+        # ((bbox xcenter - anchor box xcenter)/anchor box width)/.1
+        # ((bbox ycenter - anchor box ycenter)/anchor box height)/.1
         # Equation 11.4.8 Chapter 11
         offsets1 = labels[:, 0:2] - anchors[maxiou_per_gt, 0:2]
         offsets1 /= anchors[maxiou_per_gt, 2:4]
@@ -327,7 +329,7 @@ def get_gt_data(iou,
         # log(bbox width / anchor box width) / 0.2
         # log(bbox height / anchor box height) / 0.2
         # Equation 11.4.8 Chapter 11
-        offsets2 = np.log(labels[:, 2:4] / anchors[maxiou_per_gt, 2:4])
+        offsets2 = np.log(labels[:, 2:4]/anchors[maxiou_per_gt, 2:4])
         offsets2 /= 0.2  
 
         offsets = np.concatenate([offsets1, offsets2], axis=-1)

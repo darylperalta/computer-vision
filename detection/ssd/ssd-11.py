@@ -49,6 +49,7 @@ from boxes import show_boxes
 from model import build_ssd
 from loss import focal_loss_categorical, smooth_l1_loss, l1_loss
 from model_utils import lr_scheduler, ssd_parser
+from common_utils import print_log
 
 
 class SSD:
@@ -151,13 +152,13 @@ class SSD:
         optimizer = Adam(lr=1e-3)
         # choice of loss functions via args
         if self.args.improved_loss:
-            print("Focal loss and smooth L1")
+            print_log("Focal loss and smooth L1", self.args.verbose)
             loss = [focal_loss_categorical, smooth_l1_loss]
         elif self.args.smooth_l1:
-            print("Smooth L1")
+            print_log("Smooth L1", self.args.verbose)
             loss = ['categorical_crossentropy', smooth_l1_loss]
         else:
-            print("Cross-entropy and L1")
+            print_log("Cross-entropy and L1", self.args.verbose)
             loss = ['categorical_crossentropy', l1_loss]
 
         self.ssd.compile(optimizer=optimizer, loss=loss)
@@ -181,9 +182,12 @@ class SSD:
         model_name += self.args.dataset
         model_name += '-{epoch:03d}.h5'
 
-        print("# of classes", self.n_classes)
-        print("Batch size: ", self.args.batch_size)
-        print("Weights filename: ", model_name)
+        log = "# of classes %d" % self.n_classes
+        print_log(log, self.args.verbose)
+        log = "Batch size: %d" % self.args.batch_size
+        print_log(log, self.args.verbose)
+        log = "Weights filename: %s" % model_name
+        print_log(log, self.args.verbose)
         if not os.path.isdir(save_dir):
             os.makedirs(save_dir)
         filepath = os.path.join(save_dir, model_name)
@@ -211,7 +215,8 @@ class SSD:
         if self.args.restore_weights:
             save_dir = os.path.join(os.getcwd(), self.args.save_dir)
             filename = os.path.join(save_dir, self.args.restore_weights)
-            print("Loading weights: ", filename)
+            log = "Loading weights: %s" % filename
+            print(log, self.args.verbose)
             self.ssd.load_weights(filename)
 
 

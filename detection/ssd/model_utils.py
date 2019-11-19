@@ -163,4 +163,11 @@ def ssd_parser():
                         action='store_true', 
                         help=help_)
 
+    # debug configuration
+    help_ = "Level of verbosity for print function"
+    parser.add_argument("--verbose",
+                        default=1,
+                        type=int,
+                        help=help_)
+
     return parser
