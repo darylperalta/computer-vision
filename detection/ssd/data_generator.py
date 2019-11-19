@@ -59,7 +59,8 @@ class DataGenerator(Sequence):
 
     def __len__(self):
         """Number of batches per epoch"""
-        return int(np.floor(len(self.dictionary) / self.args.batch_size))
+        batch = np.floor(len(self.dictionary) / self.args.batch_size)
+        return int(batch)
 
 
     def __getitem__(self, index):
@@ -117,7 +118,8 @@ class DataGenerator(Sequence):
         object detection ground truth labels 
 
         Arguments:
-            keys (array): Randomly sampled keys (key is image filename)
+            keys (array): Randomly sampled keys
+                (key is image filename)
 
         Returns:
             x (tensor): Batch images
