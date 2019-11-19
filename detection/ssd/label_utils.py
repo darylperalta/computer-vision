@@ -96,9 +96,9 @@ def get_label_dictionary(labels, keys):
     return dictionary
 
 
-def build_label_dictionary(csv_path):
+def build_label_dictionary(path):
     """Build a dict with key=filename, value=[box coords, class]"""
-    labels = load_csv(csv_path)
+    labels = load_csv(path)
     # skip the 1st line header
     labels = labels[1:]
     # keys are filenames

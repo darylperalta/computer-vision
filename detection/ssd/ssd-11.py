@@ -76,9 +76,6 @@ class SSD:
 
     def build_model(self):
         """Build backbone and SSD models."""
-        # store in a dictionary the list of image files and labels
-        self.build_dictionary()
-
         # input shape is (480, 640, 3) by default
         self.input_shape = (self.args.height, 
                             self.args.width,
@@ -111,30 +108,22 @@ class SSD:
         from a csv file and store in a dictionary.
         """
         # train dataset path
-        csv_path = os.path.join(self.args.data_path,
-                                self.args.train_labels)
+        path = os.path.join(self.args.data_path,
+                            self.args.train_labels)
 
         # build dictionary: 
         # key=image filaname, value=box coords + class label
         # self.classes is a list of class labels
-        self.dictionary, self.classes  = build_label_dictionary(csv_path)
+        self.dictionary, self.classes = build_label_dictionary(path)
         self.n_classes = len(self.classes)
         self.keys = np.array(list(self.dictionary.keys()))
 
 
-    def print_summary(self):
-        """Print network summary for debugging purposes."""
-        from tensorflow.keras.utils import plot_model
-        if self.args.summary:
-            self.backbone.summary()
-            self.ssd.summary()
-            plot_model(self.backbone,
-                       to_file="backbone.png",
-                       show_shapes=True)
-
-
     def build_generator(self):
         """Build a multi-thread train data generator."""
+        # store in a dictionary the list of image files and labels
+        self.build_dictionary()
+
         self.train_generator = DataGenerator(args=self.args,
                                              dictionary=self.dictionary,
                                              n_classes=self.n_classes,
@@ -248,10 +237,10 @@ class SSD:
 
     def evaluate_test(self):
         # test labels csv path
-        csv_path = os.path.join(self.args.data_path,
-                                self.args.test_labels)
+        path = os.path.join(self.args.data_path,
+                            self.args.test_labels)
         # test dictionary
-        dictionary, _ = build_label_dictionary(csv_path)
+        dictionary, _ = build_label_dictionary(path)
         keys = np.array(list(dictionary.keys()))
         # number of gt bbox overlapping predicted bbox
         n_iou = 0
@@ -311,6 +300,17 @@ class SSD:
         print("tp:" , tp)
         print("fp:" , fp)
         print("precision:" , tp/(tp+fp))
+
+
+    def print_summary(self):
+        """Print network summary for debugging purposes."""
+        from tensorflow.keras.utils import plot_model
+        if self.args.summary:
+            self.backbone.summary()
+            self.ssd.summary()
+            plot_model(self.backbone,
+                       to_file="backbone.png",
+                       show_shapes=True)
 
 
 if __name__ == '__main__':
