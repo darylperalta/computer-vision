@@ -125,12 +125,13 @@ class SSD:
     def build_generator(self):
         """Build a multi-thread train data generator."""
 
-        self.train_generator = DataGenerator(args=self.args,
-                                             dictionary=self.dictionary,
-                                             n_classes=self.n_classes,
-                                             feature_shapes=self.feature_shapes,
-                                             n_anchors=self.n_anchors,
-                                             shuffle=True)
+        self.train_generator = \
+                DataGenerator(args=self.args,
+                              dictionary=self.dictionary,
+                              n_classes=self.n_classes,
+                              feature_shapes=self.feature_shapes,
+                              n_anchors=self.n_anchors,
+                              shuffle=True)
 
 
     def train(self):
