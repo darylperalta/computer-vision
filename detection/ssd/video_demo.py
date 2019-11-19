@@ -14,9 +14,9 @@ import label_utils
 import config
 
 from ssd import SSD
-from resnet import build_resnet
 from boxes import show_boxes
 from skimage.io import imread
+from model_utils import ssd_parser
 
 
 class  VideoDemo():
@@ -161,20 +161,7 @@ class  VideoDemo():
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    help_ = "Load h5 model trained weights"
-    parser.add_argument("--restore-weights",
-                        help=help_)
-    help_ = "Normalize predictions"
-    parser.add_argument("--normalize",
-                        default=False,
-                        action='store_true', 
-                        help=help_)
-    help_ = "Number of layers"
-    parser.add_argument("--layers",
-                        default=4,
-                        type=int,
-                        help=help_)
+    parser = ssd_parser()
     help_ = "Camera index"
     parser.add_argument("--camera",
                         default=0,
@@ -195,7 +182,7 @@ if __name__ == '__main__':
     ssd = SSD(args)
 
     if args.restore_weights:
-        ssd.load_weights(args.restore_weights)
+        ssd.restore_weights()
         videodemo = VideoDemo(detector=ssd,
                               camera=args.camera,
                               record=args.record,
