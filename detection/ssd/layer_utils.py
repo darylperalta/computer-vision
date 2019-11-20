@@ -284,7 +284,8 @@ def get_gt_data(iou,
         if iou_gt_thresh.size > 0:
             extra_anchors = iou_gt_thresh[:,0]
             extra_classes = iou_gt_thresh[:,1]
-            extra_labels = labels[:,:][extra_classes]
+            #extra_labels = labels[:,:][extra_classes]
+            extra_labels = labels[extra_classes]
             indexes = [maxiou_per_gt, extra_anchors]
             maxiou_per_gt = np.concatenate(indexes,
                                            axis=0)
