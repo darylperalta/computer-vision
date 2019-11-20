@@ -149,7 +149,7 @@ def ssd_parser():
                         help=help_)
     help_ = "Class probability threshold (>= is an object)"
     parser.add_argument("--class-threshold",
-                        default=0.8,
+                        default=0.5,
                         type=float,
                         help=help_)
     help_ = "NMS IoU threshold"

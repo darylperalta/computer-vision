@@ -245,16 +245,15 @@ class SSD:
         dictionary, _ = build_label_dictionary(path)
         keys = np.array(list(dictionary.keys()))
         # number of gt bbox overlapping predicted bbox
-        n_iou = 0
+        #n_iou = 0
+        # sum of precision
+        s_precision = 0
+        # sum of recall
+        s_recall = 0
         # sum of IoUs
         s_iou = 0
-        # true positive
-        tp = 0
-        # false positiove
-        fp = 0
         for key in keys:
-            labels = dictionary[key]
-            labels = np.array(labels)
+            labels = np.array(dictionary[key])
             # 4 boxes coords are 1st four items of labels
             gt_boxes = labels[:, 0:-1]
             # last one is class
@@ -279,29 +278,41 @@ class SSD:
                 continue
             # the class of predicted box w/ max iou
             maxiou_class = np.argmax(iou, axis=1)
-            n = iou.shape[0]
-            n_iou += n
-            s = []
-            for j in range(n):
-                # list of max ious
-                s.append(iou[j, maxiou_class[j]])
-                # true positive has the same class and gt
-                if gt_class_ids[j] == class_ids[maxiou_class[j]]:
-                    tp += 1
-                else:
-                    fp += 1
 
-            # extra predictions belong to false positives
-            fp += abs(len(class_ids) - len(gt_class_ids))
-            s = np.sum(s)
-            s_iou += s
+            # number of ground truth bounding boxes
+            #n_gt = iou.shape[0]
+            # total number of ground truth bounding boxes
+            #n_iou += n_gt
 
-        print("sum:", s_iou) 
-        print("num:", n_iou) 
-        print("mIoU:", s_iou/n_iou)
-        print("tp:" , tp)
-        print("fp:" , fp)
-        print("precision:" , tp/(tp+fp))
+            # true positive
+            tp = 0
+            # false positiove
+            fp = 0
+            s_image_iou = []
+            for n in range(iou.shape[0]):
+                # list of max ious per class
+                if iou[n, maxiou_class[n]] > 0:
+                    s_image_iou.append(iou[n, maxiou_class[n]])
+                    # true positive has the same class and gt
+                    if gt_class_ids[n] == class_ids[maxiou_class[n]]:
+                        tp += 1
+                    else:
+                        fp += 1
+
+            # objects that we missed (false negative)
+            fn = abs(len(gt_class_ids) - tp)
+            s_iou += (np.sum(s_image_iou) / iou.shape[0])
+            s_precision += (tp/(tp + fp))
+            s_recall += (tp/(tp + fn))
+
+
+        n_test = len(keys)
+        print_log("mIoU: %f" % (s_iou/n_test),
+                  self.args.verbose)
+        print_log("Precision: %f" % (s_precision/n_test),
+                  self.args.verbose)
+        print_log("Recall : %f" % (s_recall/n_test),
+                  self.args.verbose)
 
 
     def print_summary(self):
