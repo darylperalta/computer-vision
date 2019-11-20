@@ -244,15 +244,15 @@ class SSD:
         # test dictionary
         dictionary, _ = build_label_dictionary(path)
         keys = np.array(list(dictionary.keys()))
-        # number of gt bbox overlapping predicted bbox
-        #n_iou = 0
         # sum of precision
         s_precision = 0
         # sum of recall
         s_recall = 0
         # sum of IoUs
         s_iou = 0
+        # evaluate per image
         for key in keys:
+            # grounnd truth labels
             labels = np.array(dictionary[key])
             # 4 boxes coords are 1st four items of labels
             gt_boxes = labels[:, 0:-1]
@@ -279,18 +279,14 @@ class SSD:
             # the class of predicted box w/ max iou
             maxiou_class = np.argmax(iou, axis=1)
 
-            # number of ground truth bounding boxes
-            #n_gt = iou.shape[0]
-            # total number of ground truth bounding boxes
-            #n_iou += n_gt
-
             # true positive
             tp = 0
             # false positiove
             fp = 0
+            # sum of objects iou per image
             s_image_iou = []
             for n in range(iou.shape[0]):
-                # list of max ious per class
+                # ground truth bbox has a label
                 if iou[n, maxiou_class[n]] > 0:
                     s_image_iou.append(iou[n, maxiou_class[n]])
                     # true positive has the same class and gt
