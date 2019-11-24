@@ -40,8 +40,8 @@ def anchor_boxes(feature_shape,
                  index=0,
                  n_layers=4,
                  aspect_ratios=(1, 2, 0.5)):
-    """ Compute the anchor boxes per feature map
-    anchor boxes are in minmax format
+    """ Compute the anchor boxes for a given feature map.
+    Anchor boxes are in minmax format
 
     Arguments:
         feature_shape (list): Feature map shape
@@ -71,13 +71,13 @@ def anchor_boxes(feature_shape,
     # list of anchor boxes (width, height)
     width_height = []
     # anchor box by aspect ratio on resized image dims
-    # Equation 11.2.3 in Chapter 11
+    # Equation 11.2.3 
     for ar in aspect_ratios:
         box_width = norm_width * np.sqrt(ar)
         box_height = norm_height / np.sqrt(ar)
         width_height.append((box_width, box_height))
-    # multiple anchor box by size[1] for aspect_ratio = 1
-    # Equation 11.2.4 in Chapter 11
+    # multiply anchor box dim by size[1] for aspect_ratio = 1
+    # Equation 11.2.4
     box_width = image_width * sizes[1]
     box_height = image_height * sizes[1]
     width_height.append((box_width, box_height))
@@ -322,14 +322,14 @@ def get_gt_data(iou,
         # bbox = bounding box
         # ((bbox xcenter - anchor box xcenter)/anchor box width)/.1
         # ((bbox ycenter - anchor box ycenter)/anchor box height)/.1
-        # Equation 11.4.8 Chapter 11
+        # Equation 11.4.8
         offsets1 = labels[:, 0:2] - anchors[maxiou_per_gt, 0:2]
         offsets1 /= anchors[maxiou_per_gt, 2:4]
         offsets1 /= 0.1
 
         # log(bbox width / anchor box width) / 0.2
         # log(bbox height / anchor box height) / 0.2
-        # Equation 11.4.8 Chapter 11
+        # Equation 11.4.8 
         offsets2 = np.log(labels[:, 2:4]/anchors[maxiou_per_gt, 2:4])
         offsets2 /= 0.2  
 
