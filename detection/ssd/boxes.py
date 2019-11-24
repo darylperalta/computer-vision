@@ -198,7 +198,8 @@ def show_boxes(args,
                              edgecolor=color,
                              facecolor='none')
             ax.add_patch(rect)
-            bbox = dict(color='none', alpha=1.0)
+            bbox = dict(color='white',
+                        alpha=1.0)
             ax.text(anchor[0] + 2,
                     anchor[2] - 16,
                     class_name,
@@ -207,6 +208,7 @@ def show_boxes(args,
                     bbox=bbox,
                     fontsize=8,
                     verticalalignment='top')
+            #t.set_bbox(dict(facecolor='red', alpha=0.5, edgecolor='red'))
 
     if show:
         plt.show()
