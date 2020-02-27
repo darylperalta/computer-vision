@@ -6,6 +6,7 @@
     - [SSD in Keras](https://github.com/roatienza/computer-vision/blob/master/detection/ssd/README.md)
 3. [Object Segmentation](https://drive.google.com/file/d/1yC7cnmw-oVEAEtqvMwkptuEax0EV5gAr/view?usp=sharing)
 4. [Mutual Information, Unsupervised Learninng](https://drive.google.com/file/d/1f_vYYGa2jzZDCLek8fHNZxsCKxtbGMjC/view?usp=sharing)
+    - [MI in Keras](https://github.com/PacktPublishing/Advanced-Deep-Learning-with-Keras/tree/master/chapter13-mi-unsupervised)
 5. [Meta-Learning](https://drive.google.com/file/d/1KUbbLYs2ouxiALWRgbncfCR8kcBzSPRl/view?usp=sharing)
 6. [Causality](https://drive.google.com/file/d/1dYiBuILULfmXVCgk5FGZX8tseZQDv8QG/view?usp=sharing)
 
