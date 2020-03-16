@@ -1,8 +1,12 @@
 """
 Train:
-python3 vae.py --train --epochs=60 --latent-dim=8 --dataset=fashionmnist
+python3 vae.py --train --epochs=60 --latent-dim=16 --dataset=mnist
+or
+python3 vae.py --train --epochs=60 --latent-dim=16 --dataset=fashionmnist
 
 Eval:
+python3 vae.py --restore-weights=mnist-vae-16-beta-1.pt --latent-dim=16 --kmeans=mnist-kmeans-16-beta-1.pt --dataset=nmnist
+or
 python3 vae.py --restore-weights=fashionmnist-vae-32-beta-1.pt --latent-dim=32 --kmeans=fashionmnist-kmeans-32-beta-1.pt --dataset=fashionmnist
 
 """
