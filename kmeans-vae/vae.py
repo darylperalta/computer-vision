@@ -36,6 +36,7 @@ import pickle
 from matplotlib import pyplot as plt
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
+import cv2
 
 
 def get_args():
@@ -312,6 +313,63 @@ def plot_tsne(mus_tsne, filename=None, n_clusters=10):
                     )
     fig = ax.get_figure()
     fig.savefig('results/tsne.png')
+    centers = kmeans.cluster_centers_
+    print('centers shape',centers[0].shape)
+    # for i in range(n_clusters):
+
+def plot_tsne2(args, mus, model, filename=None, n_clusters=10):
+    kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(mus)
+    x = mus[:,0]
+    y = mus[:,1]
+    data = pd.DataFrame()
+    data['x'] = x
+    data['y'] = y
+    data['label'] = kmeans.labels_
+    #current_palette = sns.color_palette()
+    #sns.palplot(current_palette)
+    # ax = sns.scatterplot(
+    #                 x="x", y="y",
+    #                 hue="label",
+    #                 data=data,
+    #                 palette=sns.color_palette("hls", n_clusters),
+    #                 alpha=0.3
+    #                 )
+    # fig = ax.get_figure()
+    # fig.savefig('results/tsne.png')
+    centers = kmeans.cluster_centers_
+    print('centers shape',centers[0].shape)
+    device = get_device()
+    centroid_idx = list(range(n_clusters))
+    # for i in range(n_clusters):
+
+    centroid_mu = centers[centroid_idx]
+    print('centroid shape',centroid_mu.shape)
+    centroid_mu = torch.tensor(centroid_mu).to(device)
+    # logvar = torch.zeros(centroid_mu.shape).to(device)
+    # print('mu and logvar shapes', centroid_mu.shape, logvar.shape)
+
+    # z = model.reparameterize(centroid_mu, logvar)
+    z = centroid_mu
+    centroid = model.decoder(z)
+    # print('i',i)
+    print('centroid', centroid.shape)
+    # cv2.imshow('image',centroid)
+    # n = min(x.size(0), 64)
+    folder = "results"
+    # os.makedirs(folder, exist_ok=True)
+
+    # xp, mu, logvar = model(x)
+    # img = torch.cat([x[:n],
+    #                 xp.view(args.batch_size, 1, args.crop_size, args.crop_size)[:n]])
+    # filename = folder + '/centroid_images'+str(i)+'.png'
+    filename = folder + '/centroid_images.png'
+
+    save_image(centroid, filename,nrow=n_clusters)
+
+        # img = torch.cat([x[:n],
+        #                 centroid.view(args.batch_size, 1, args.crop_size, args.crop_size)[:n]])
+        # filename = folder + '/centroid.png'
+        # save_image(img.cpu(), filename, nrow=n)
 
 
 def to_categorical(y, n_clusters=10):
@@ -339,11 +397,12 @@ def plot_centroid(args, model, data_loader, mus, filename=None, n_clusters=10):
         ypred = ypred.to(device)
         for i, (x, target) in enumerate(data_loader):
             x = x.to(device)
+            # print('x shape', x.shape)
             target = target.to(device)
 
             mu, logvar = model.encoder(x)
             labels = kmeans.predict(mu.cpu())
-
+            #print('labels shape', labels.shape)
             #y = to_categorical(torch.from_numpy(labels).to(device, dtype=torch.long), n_clusters=n_clusters)
             y = torch.from_numpy(labels).to(device, dtype=torch.long)
             ytrue = torch.cat((ytrue, target), axis=0)
@@ -358,6 +417,7 @@ def plot_centroid(args, model, data_loader, mus, filename=None, n_clusters=10):
             if i==0:
                 centroid_mu = centers[labels]
                 centroid_mu = torch.tensor(centroid_mu).to(device)
+                # print('mu and logvar shapes', centroid_mu.shape, logvar.shape)
                 z = model.reparameterize(centroid_mu, logvar)
                 centroid = model.decoder(z)
 
@@ -437,9 +497,13 @@ def vae():
         compute_kmeans = True
 
     if compute_kmeans:
+        print('start tsne')
         mus, mus_tsne = tsne(args, model, train_loader, tsne=args.tsne)
         if args.tsne:
-            plot_tsne(mus_tsne)
+            print('tsnes-ing')
+            plot_tsne(mus_tsne, n_clusters=11)
+            plot_tsne2(args,mus, model, n_clusters=10)
+            print('finished-tsne')
         if args.kmeans is None:
             plot_centroid(args, model, train_loader, mus, args.kmeans)
         else:
