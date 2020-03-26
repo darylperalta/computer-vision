@@ -47,28 +47,28 @@ def get_args():
                         metavar='N',
                         help='input batch size for training (default: 128)')
     parser.add_argument('--epochs',
-                        type=int, 
-                        default=20, 
+                        type=int,
+                        default=20,
                         metavar='N',
                         help='number of epochs to train (default: 20)')
-    parser.add_argument('--seed', 
-                        type=int, 
-                        default=1, 
+    parser.add_argument('--seed',
+                        type=int,
+                        default=1,
                         metavar='S',
                         help='random seed (default: 1)')
     parser.add_argument('--crop-size',
                         type=int,
-                        default=28, 
+                        default=28,
                         metavar='N',
                         help='Crop size')
     parser.add_argument('--latent-dim',
                         type=int,
-                        default=32, 
+                        default=32,
                         metavar='N',
                         help='Latent dim')
     parser.add_argument('--beta',
-                        type=float, 
-                        default=1, 
+                        type=float,
+                        default=1,
                         metavar='N',
                         help='Beta in BetaVAE')
     parser.add_argument('--save-dir',
@@ -100,25 +100,29 @@ def get_dataloader(args, dataset):
 
     kwargs = {'num_workers': 1, 'pin_memory': True} if cuda else {}
 
-    data_loader = DataLoader(dataset, 
-                             batch_size=args.batch_size, 
-                             shuffle=True, 
+    data_loader = DataLoader(dataset,
+                             batch_size=args.batch_size,
+                             shuffle=True,
                              **kwargs)
     return data_loader
+
+class Flatten(nn.Module):
+    def forward(self, input):
+        return input.view(input.size(0), -1)
 
 
 class Encoder(nn.Module):
     def __init__(self, latent_dim=16, crop_size=28):
         super(Encoder, self).__init__()
-       
-        mid_dim = 128 
+
+        mid_dim = 128
         down_dim = crop_size // 4
         # in=24, out=12
         self.conv2d1 = nn.Conv2d(1, 32, kernel_size=3, stride=2, padding=1)
 
         # in=12, out=6
         self.conv2d2 = nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)
-        self.flatten = nn.Flatten()
+        self.flatten = Flatten()
 
         self.feature = nn.Linear(down_dim*down_dim*64, mid_dim)
         self.mu = nn.Linear(mid_dim, latent_dim)
@@ -131,14 +135,14 @@ class Encoder(nn.Module):
         x = self.flatten(x)
         x = F.relu(self.feature(x), inplace=True)
         return self.mu(x), self.logvar(x)
-        
+
 
 class Decoder(nn.Module):
     def __init__(self, latent_dim=16, crop_size=28):
         super(Decoder, self).__init__()
 
         self.down_dim = crop_size // 4
-       
+
         self.sample = nn.Linear(latent_dim, self.down_dim*self.down_dim*64)
         self.conv2d1 = nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=1)
         self.conv2d2 = nn.ConvTranspose2d(32, 16, kernel_size=4, stride=2, padding=0)
@@ -153,7 +157,7 @@ class Decoder(nn.Module):
         x = F.relu(self.conv2d2(x), inplace=True)
         x = self.sigmoid(self.conv2d3(x))
         return x
-        
+
 
 class VAE(nn.Module):
     def __init__(self, latent_dim=16, crop_size=28):
@@ -220,7 +224,7 @@ def train(args, model, train_loader, optimizer, epoch):
         kl_losses.update(kl.float().item()/x.size(0))
         optimizer.step()
         progress_bar(i,
-                     len(train_loader), 
+                     len(train_loader),
                      'Epoch: %d | Recon Loss: %.6f | KL Loss: %.6f' % (epoch, recon_losses.avg, kl_losses.avg))
 
 
@@ -250,7 +254,7 @@ def test(args, model, test_loader, epoch=0):
             kl_losses.update(kl.float().item()/x.size(0))
 
             progress_bar(i,
-                         len(test_loader), 
+                         len(test_loader),
                          'Epoch: %d | Recon Loss: %.6f | KL Loss: %.6f' % (epoch, recon_losses.avg, kl_losses.avg))
 
             if i == 0:
@@ -282,7 +286,7 @@ def tsne(args, model, data_loader, tsne=False):
             if len(mus) == 0:
                 mus = mu.cpu()
             else:
-                mus = np.concatenate((mus, mu.cpu()), axis=0)
+                mus = np.concatenate((mus, mu.cpu()), 0)
             progress_bar(i, len(data_loader))
 
     if tsne:
@@ -378,7 +382,7 @@ def to_categorical(y, n_clusters=10):
 def plot_centroid(args, model, data_loader, mus, filename=None, n_clusters=10):
     if filename is None:
         kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(mus)
-        filename = args.dataset + "-kmeans-" + str(args.latent_dim) + "-beta-" + str(args.beta) + ".pt" 
+        filename = args.dataset + "-kmeans-" + str(args.latent_dim) + "-beta-" + str(args.beta) + ".pt"
         path = os.path.join(args.save_dir, filename)
         print("Saving kmeans: %s\n" % (path))
         pickle.dump(kmeans, open(path, "wb"))
@@ -405,12 +409,12 @@ def plot_centroid(args, model, data_loader, mus, filename=None, n_clusters=10):
             #print('labels shape', labels.shape)
             #y = to_categorical(torch.from_numpy(labels).to(device, dtype=torch.long), n_clusters=n_clusters)
             y = torch.from_numpy(labels).to(device, dtype=torch.long)
-            ytrue = torch.cat((ytrue, target), axis=0)
-            ypred = torch.cat((ypred, y.to(device)), axis=0)
+            ytrue = torch.cat((ytrue, target), 0)
+            ypred = torch.cat((ypred, y.to(device)), 0)
             accuracy = unsupervised_labels(ytrue.cpu(), ypred.cpu(), n_clusters, n_clusters)
             method = "Unsupervised (VAE)"
             progress_bar(i,
-                         len(data_loader), 
+                         len(data_loader),
                          '%s | Acc: %0.2f%%'
                          % (method, accuracy))
 
@@ -444,26 +448,26 @@ def vae():
     model = VAE(args.latent_dim, args.crop_size).to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-3)
     if args.dataset=="mnist":
-        dataset = datasets.MNIST('./data', 
-                                 train=True, 
+        dataset = datasets.MNIST('./data',
+                                 train=True,
                                  download=True,
                                  transform=crop_transform(args.crop_size))
         train_loader = get_dataloader(args, dataset)
 
-        dataset = datasets.MNIST('./data', 
-                                 train=False, 
+        dataset = datasets.MNIST('./data',
+                                 train=False,
                                  download=True,
                                  transform=crop_transform(args.crop_size))
         test_loader = get_dataloader(args, dataset)
     elif args.dataset == "fashionmnist":
-        dataset = datasets.FashionMNIST('./data', 
-                                        train=True, 
+        dataset = datasets.FashionMNIST('./data',
+                                        train=True,
                                         download=True,
                                         transform=crop_transform(args.crop_size))
         train_loader = get_dataloader(args, dataset)
 
-        dataset = datasets.FashionMNIST('./data', 
-                                        train=False, 
+        dataset = datasets.FashionMNIST('./data',
+                                        train=False,
                                         download=True,
                                         transform=crop_transform(args.crop_size))
         test_loader = get_dataloader(args, dataset)
@@ -479,9 +483,9 @@ def vae():
         for epoch in range(1, args.epochs + 1):
             print("Epoch %d" % (epoch))
             train(args, model, train_loader, optimizer, epoch)
-            
+
         test(args, model, test_loader, epoch)
-        filename = args.dataset + "-vae-" + str(args.latent_dim) + "-beta-" + str(args.beta) + ".pt" 
+        filename = args.dataset + "-vae-" + str(args.latent_dim) + "-beta-" + str(args.beta) + ".pt"
         path = os.path.join(folder, filename)
         print("Saving weights: %s\n" % (path))
         torch.save(model.state_dict(), path)
